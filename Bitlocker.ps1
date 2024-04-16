@@ -8,12 +8,12 @@ function Get-SMBiosVersion {
 #Get-SMBiosVersion
 
 
-<#TPM Check
+#Check TPM
 
 function Get-TPMState {
 
     $TPM = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName 'win32_tpm' 
-    return $TPM.IsActivated_InitialValue
+    return $TPM
 
     #Return "TPM is not found"
 }
@@ -36,7 +36,7 @@ function Get-VCRedist10 {
 
 #Redistributable 2015-2022
 function Get-VCRedist22 {
-    $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2015-2022"}
+    $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object {$_.displayname -like "Microsoft Visual C++ 2015-2022"}
 
     if (-not($2015)){
         Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "C:\vcdownload\vc_redist.x64.exe"
