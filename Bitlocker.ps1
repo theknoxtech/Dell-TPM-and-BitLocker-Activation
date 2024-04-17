@@ -26,20 +26,20 @@ Get-BiosRequiresUpdate
 
 function Get-TPMState {
 
-    $Check1 = Get-Tpm | Select-Object -Property TpmPresent
-    $Check2 = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName 'win32_tpm' | Select-Object IsEnabled_InitialValue
-    
+    $Check1 = Get-Tpm | Select-Object -ExpandProperty TpmPresent
+    $Check2 = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName 'win32_tpm' | Select-Object -ExpandProperty IsEnabled_InitialValue
+
     if ($Check1) {
         Write-Host "TPM is present" 
         if ($Check2) {
             Return "TPM is enabled"
+        }else { 
+            return "TPM is NOT enabled"; break 
         }
-
+    }else {
+        Write-Host "NO TPM Present"; break
     }
 }
-
-
-#Return "TPM is not found"
 
 
 Get-TPMState
@@ -69,7 +69,7 @@ function Get-VCRedist22 {
 }
 
 #Nuget
-Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+Install-PackageProvider -Name nuget -MinimumVersion 2.8.5.201 -Force
 
 #DellBiosProvider
 Install-Module -Name DellBIOSProvider -Force
