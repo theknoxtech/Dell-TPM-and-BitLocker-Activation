@@ -44,16 +44,25 @@ function Get-TPMState {
 
 Get-TPMState
 
+function Get-Folder {
+
+    if (-not(Test-Path -Path C:\vcdownload)){
+            New-Item -Path C:\vcdownload -ItemType Directory
+        }
+}
 
 
 #Redistributable 2010
 function Get-VCRedist10 {
-    $2010 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object {$_.displayname -like "Microsoft Visual C++ 2010"}
+    $2010 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2010" }
 
-    if (-not ($2010)){
+    if (-not ($2010)) {
+        Get-Folder
         Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "C:\vcdownload\2010vc_redist_x64.exe"
         Set-Location C:\vcdownload
-        .\2010vc_redist_x64.exe /q /norestart /passive
+        .\2010vc_redist_x64.exe /extract:64 /q
+        Set-Location .\x64
+        .\x64\Setup.exe /passive /q
     }
 }
 
@@ -61,12 +70,13 @@ Get-VCRedist10
 
 #Redistributable 2015-2022
 function Get-VCRedist22 {
-    $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object {$_.displayname -like "Microsoft Visual C++ 2015-2022"}
+    $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2015-2022" }
 
-    if (-not($2015)){
+    if (-not($2015)) {
+        Get-Folder
         Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "C:\vcdownload\vc_redist.x64.exe"
         Set-Location C:\vcdownload
-        .\vc_redist/x64.exe /q /norestart /passive
+        .\vc_redist.x64.exe /extract:64 /q
     }
 }
 
