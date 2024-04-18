@@ -89,3 +89,42 @@ Install-PackageProvider -Name nuget -MinimumVersion 2.8.5.201 -Force
 #DellBiosProvider
 Install-Module -Name DellBIOSProvider -Force
 Import-Module DellBiosProvider -Verbose
+
+#BiosPasswordCheck
+function Get-BiosAdminPassword {
+    $BiosPwdExists = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
+
+    if ($BiosPwdExists -eq $true) {
+        return "Unknown Password Exists" 
+    }
+    else {
+        Write-Host "Password Not Found"
+    }
+}
+Get-BiosAdminPassword
+
+#SetBiosAdminPassword
+
+$AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
+$PwdCheck = $AdminPasswordCheck
+
+function Set-BiosAdminPassword {
+   
+    param(
+        [String]$Password
+    )
+
+    if ($PwdCheck -eq $false) {
+        Set-Item -Path DellSmBios:\Security\AdminPassword $Password
+    }
+    else {
+        Get-ComputerInfo | Select-Object -ExcludeProperty CsName | Out-File c:\temp\test.txt -append
+        return "Bios password detected it's borked"
+    }
+
+}
+
+Set-BiosAdminPassword -Password AVeryStrongPassword
+
+
+
