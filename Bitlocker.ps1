@@ -60,9 +60,10 @@ function Get-VCRedist10 {
         Get-Folder
         Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "C:\vcdownload\2010vc_redist_x64.exe"
         Set-Location C:\vcdownload
-        .\2010vc_redist_x64.exe /extract:64 /q
-        Set-Location .\x64
-        .\x64\Setup.exe /passive /q
+        .\2010vc_redist_x64.exe /extract:vc2010 /q
+        Start-Sleep -Seconds 1.5
+        Set-Location C:\vcdownload\vc2010
+        .\Setup.exe /q
     }
 }
 
@@ -76,7 +77,7 @@ function Get-VCRedist22 {
         Get-Folder
         Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "C:\vcdownload\vc_redist.x64.exe"
         Set-Location C:\vcdownload
-        .\vc_redist.x64.exe /extract:64 /q
+        .\vc_redist.x64.exe /extract:x64 /q
     }
 }
 
