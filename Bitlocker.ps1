@@ -1,3 +1,20 @@
+#Global Storage Path
+$LTSvc = "C:\Windows\LTSvc\packages"
+
+#Start Transcript
+Start-Transcript -Path $LTSvc -Verbose
+
+#Bitlocker Check
+function Get-BitlockerStatus {
+    $Encrypted = Get-Bitlockervolume -Mountpoint C: | Select-Object -ExpandProperty EncryptionPercentage
+    $Status = Get-Bitlockervolume -Mountpoint C: | Select-Object -ExpandProperty ProtectionStatus
+
+    if (($Encrypted -gt 0) -and ($Status -eq "On")) {
+        return "Bitlocker is Enabled"
+    }
+}
+
+Get-BitlockerStatus
 #Bios verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -8,11 +25,11 @@ function Get-SMBiosVersion {
 
 
 function Get-BiosRequiresUpdate {
-    $CurrentVer = Get-SMBiosVersion
+    $CurVer = Get-SMBiosVersion
     $MinVer = 2.4
 
-    if (($CurrentVer) -le $MinVer){
-        Return Write-Host "Bios is at version $($CurrentVer). Bios must be at $($MinVer) or higher." -ErrorAction Stop
+    if (($CurVer) -le $MinVer){
+        Return Write-Host "Bios is at version $($CurVer). Bios must be at $($MinVer) or higher." -ErrorAction Stop
     }
     Return Write-Host "Bios meets minimum version requirements"
 
@@ -58,11 +75,11 @@ function Get-VCRedist10 {
 
     if (-not ($2010)) {
         Get-Folder
-        Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "C:\vcdownload\2010vc_redist_x64.exe"
-        Set-Location C:\vcdownload
+        Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "$($LTSvc)\2010vc_redist_x64.exe"
+        Set-Location $LTSvc
         .\2010vc_redist_x64.exe /extract:vc2010 /q
         Start-Sleep -Seconds 1.5
-        Set-Location C:\vcdownload\vc2010
+        Set-Location $LTSvc\vc2010
         .\Setup.exe /q
     }
 }
@@ -75,8 +92,8 @@ function Get-VCRedist22 {
 
     if (-not($2015)) {
         Get-Folder
-        Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "C:\vcdownload\vc_redist.x64.exe"
-        Set-Location C:\vcdownload
+        Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "$($LTSvc)\vc_redist.x64.exe" #C:\Windows\LTSvc\packages
+        Set-Location $LTSvc
         .\vc_redist.x64.exe /extract:x64 /q
     }
 }
@@ -97,11 +114,25 @@ Import-Module DellBiosProvider -Verbose
 $AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
 $PwdCheck = $AdminPasswordCheck
 
+
+function Create-Password{
+
+    param (
+        [Parameter(Mandatory)]
+        [int]$length
+    )
+    Add-Type -AssemblyName 'System.Web'
+    return [System.Web.Security.Membership]::GeneratePassword($length)
+}
+
+Create-Password 10
+
+
 #SetBiosAdminPassword
 function Set-BiosAdminPassword {
    
     param(
-        [String]$Password
+        [SecureString]$Password
     )
 
     if ($PwdCheck -eq $false) {
@@ -118,3 +149,12 @@ Set-BiosAdminPassword -Password AVeryStrongPassword
 
 
 
+
+
+
+
+
+
+
+#Stop Transcript
+Stop-Transcript
