@@ -57,6 +57,8 @@ function Get-VCRedist10 {
     }
 }
 
+Get-VCRedist10
+
 #Redistributable 2015-2022
 function Get-VCRedist22 {
     $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object {$_.displayname -like "Microsoft Visual C++ 2015-2022"}
@@ -67,6 +69,8 @@ function Get-VCRedist22 {
         .\vc_redist/x64.exe /q /norestart /passive
     }
 }
+
+Get-VCRedist22
 
 #Nuget
 Install-PackageProvider -Name nuget -MinimumVersion 2.8.5.201 -Force
