@@ -65,14 +65,47 @@ function Get-TPMState {
     return $TPMState
 }
 
+function IsVCRedistInstalled {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [int]$Version
+    )
+    $version = Get-CimInstance Win32_Product | Select-Object -Property Name, PackageName 
+    $installed_version = New-Object psobject
+    $installed_version | Add-Member NoteProperty "Name" $version.Name
+    $installed_version | Add-Member NoteProperty "PackageName" $version.PackageName
+
+    $installed_version | Add-Member ScriptMethod "CheckInstalledVersions" {
+        if ($this.PackageName -eq "vc_red.msi" -or $this.PackageName -eq "vc_runtimeMinimum_x64.msi"){
+            Return $true
+        } 
+
+        return $false
+    }
+
+    return $Version
+
+
+}
+
+
+
+
+
+
+
 #Redistributable 2010
 function Get-VCRedist10 {
+    
+
+
+
     $2010 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2010" }
 
     if (-not ($2010)) {
     
         #Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "$($LTSvc)\2010vc_redist_x64.exe"
-        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\2010vc_redist_x64.exe")
+        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
         Set-Location $LTSvc
         .\2010vc_redist_x64.exe /extract:vc2010 /q
         Start-Sleep -Seconds 1.5
