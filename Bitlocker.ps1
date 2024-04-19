@@ -2,19 +2,25 @@
 $LTSvc = "C:\Windows\LTSvc\packages"
 
 #Start Transcript
-Start-Transcript -Path $LTSvc -Verbose
+# Start-Transcript -Path $LTSvc -Verbose
 
 #Bitlocker Check
-function Get-BitlockerStatus {
-    $Encrypted = Get-Bitlockervolume -Mountpoint C: | Select-Object -ExpandProperty EncryptionPercentage
-    $Status = Get-Bitlockervolume -Mountpoint C: | Select-Object -ExpandProperty ProtectionStatus
+function IsVolumeEncrypted {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [char]$DriveLetter
+    )
 
-    if (($Encrypted -gt 0) -and ($Status -eq "On")) {
-        return "Bitlocker is Enabled"
+    $volume_status = (Get-BitLockerVolume -MountPoint "$($DriveLetter):" -ErrorAction SilentlyContinue).VolumeStatus
+
+    if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress")
+    {
+        return $true
     }
+
+    return $false
 }
 
-Get-BitlockerStatus
 #Bios verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -22,101 +28,95 @@ function Get-SMBiosVersion {
     return $Version
 }
 
-
-
-function Get-BiosRequiresUpdate {
-    $CurVer = Get-SMBiosVersion
-    $MinVer = 2.4
-
-    if (($CurVer) -le $MinVer){
-        Return Write-Host "Bios is at version $($CurVer). Bios must be at $($MinVer) or higher." -ErrorAction Stop
-    }
-    Return Write-Host "Bios meets minimum version requirements"
-
-
+# Returns true if BIOS version does not meet minium requirements. Returns False otherwise.
+function Get-SMBiosRequiresUpgrade
+{
+    Param(
+    [float]$MinimumVersion = 2.4
+  )
+  
+  if ((Get-SMBiosVersion) -lt $MinimumVersion){
+    return $true
+  }
+  
+  return $false
 }
 
-Get-BiosRequiresUpdate
 
-
-#Check TPM
-
+# Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
 function Get-TPMState {
 
-    $Check1 = Get-Tpm | Select-Object -ExpandProperty TpmPresent
-    $Check2 = Get-CimInstance -Namespace 'root/cimv2/Security/MicrosoftTpm' -ClassName 'win32_tpm' | Select-Object -ExpandProperty IsEnabled_InitialValue
+    $TPM = Get-Tpm
 
-    if ($Check1) {
-        Write-Host "TPM is present" 
-        if ($Check2) {
-            Return "TPM is enabled"
-        }else { 
-            return "TPM is NOT enabled"; break 
+    $TPMState = New-Object psobject
+    $TPMState | Add-Member NoteProperty "IsPresent" $TPM.TpmPresent
+    $TPMState | Add-Member NoteProperty "IsReady" $TPM.TpmReady
+    $TPMState | Add-Member NoteProperty "IsEnabled" $TPM.TpmEnabled
+
+    $TPMState | Add-Member ScriptMethod "CheckTPMReady" {
+        if ($this.IsPresent -and $this.IsReady -and $this.IsEnabled)
+        {
+            return $true
         }
-    }else {
-        Write-Host "NO TPM Present"; break
+
+        return $false
     }
+
+    return $TPMState
 }
-
-
-Get-TPMState
-
-function Get-Folder {
-
-    if (-not(Test-Path -Path C:\vcdownload)){
-            New-Item -Path C:\vcdownload -ItemType Directory
-        }
-}
-
 
 #Redistributable 2010
 function Get-VCRedist10 {
     $2010 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2010" }
 
     if (-not ($2010)) {
-        Get-Folder
-        Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "$($LTSvc)\2010vc_redist_x64.exe"
+    
+        #Start-BitsTransfer -Source "https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe" -Destination "$($LTSvc)\2010vc_redist_x64.exe"
+        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\2010vc_redist_x64.exe")
         Set-Location $LTSvc
         .\2010vc_redist_x64.exe /extract:vc2010 /q
         Start-Sleep -Seconds 1.5
         Set-Location $LTSvc\vc2010
         .\Setup.exe /q
+
+        #$path = [System.IO.Path]::Combine($LTSvc, "\2010vc_redist_x64.exe")
+
+        Write-Host $path
+
+        #Start-Process -NoNewWindow -FilePath "$($LTSvc)\2010vc_redist_x64.exe" -ArgumentList "/extract:vc2010", "/q" -Wait
+        #Start-Process -NoNewWindow -FilePath "$($LTSvc)\vc2010\Setup.exe" -ArgumentList "/q" -Wait
     }
 }
-
-Get-VCRedist10
 
 #Redistributable 2015-2022
 function Get-VCRedist22 {
     $2015 = Get-ItemProperty HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object { $_.displayname -like "Microsoft Visual C++ 2015-2022" }
 
     if (-not($2015)) {
-        Get-Folder
+       
         Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "$($LTSvc)\vc_redist.x64.exe" #C:\Windows\LTSvc\packages
         Set-Location $LTSvc
         .\vc_redist.x64.exe /extract:x64 /q
     }
 }
 
-Get-VCRedist22
+# #Nuget
+# Install-PackageProvider -Name nuget -MinimumVersion 2.8.5.201 -Force
 
-#Nuget
-Install-PackageProvider -Name nuget -MinimumVersion 2.8.5.201 -Force
-
-#DellBiosProvider
-Install-Module -Name DellBIOSProvider -Force
-Import-Module DellBiosProvider -Verbose
+# #DellBiosProvider
+# Install-Module -Name DellBIOSProvider -Force
+# Import-Module DellBiosProvider -Verbose
 
 
 
-#GetBiosAdminPassword
-$AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
-$PwdCheck = $AdminPasswordCheck
+# #GetBiosAdminPassword
+# $AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
+# $PwdCheck = $AdminPasswordCheck
 
-#GeneratePassword
-$DinoPass = "https://www.dinopass.com/password/strong"
-$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
-$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
+# #GeneratePassword
+# $DinoPass = "https://www.dinopass.com/password/strong"
+# $GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
+# $GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
 
 
 #SetBiosAdminPassword
@@ -135,7 +135,7 @@ function Set-BiosAdminPassword {
 
 }
 
-Set-BiosAdminPassword -$Password
+# Set-BiosAdminPassword -$Password
 
 
 
@@ -147,4 +147,24 @@ Set-BiosAdminPassword -$Password
 
 
 #Stop Transcript
-Stop-Transcript
+# Stop-Transcript
+
+#IsVolumeEncrypted -DriveLetter D
+
+function Get-BiosRequiresUpdate {
+    $CurVer = Get-SMBiosVersion
+    $MinVer = 4.2
+
+    if (Get-SMBiosRequiresUpgrade -MinimumVersion 4.2){
+        Write-Host "Bios is at version $($CurVer). Bios must be at $($MinVer) or higher." -ErrorAction Stop
+    }
+
+    else {
+        Write-Host "Bios meets minimum version requirements"
+    }
+
+
+}
+
+
+Get-BiosRequiresUpdate

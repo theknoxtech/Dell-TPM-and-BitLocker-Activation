@@ -1,11 +1,5 @@
 $LTSvc = "C:\Windows\LTSvc\packages"
-<#$DinoPass = "https://www.dinopass.com/password/strong"
-$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
-$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
-$Password = Get-Content $LTSvc\BiosPW.txt
 
-$Password
-#>
 $AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
 $PwdCheck = $AdminPasswordCheck
 
