@@ -21,4 +21,4 @@ function IsVCRedistInstalled {
 
 
 }
-IsVCRedistInstalled.CheckInstalledVersions
+(IsVCRedistInstalled).CheckInstalledVersions
