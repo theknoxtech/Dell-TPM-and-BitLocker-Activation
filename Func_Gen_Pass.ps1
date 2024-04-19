@@ -1,11 +1,36 @@
-function Create-Password {
+$LTSvc = "C:\Windows\LTSvc\packages"
+<#$DinoPass = "https://www.dinopass.com/password/strong"
+$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
+$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
+$Password = Get-Content $LTSvc\BiosPW.txt
 
-    param (
-        [Parameter(Mandatory)]
-        [int]$length
+$Password
+#>
+$AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
+$PwdCheck = $AdminPasswordCheck
+
+$DinoPass = "https://www.dinopass.com/password/strong"
+$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
+$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
+
+
+
+
+
+#SetBiosAdminPassword
+function Set-BiosAdminPassword {
+    param(
+        [String]$Password
     )
-    Add-Type -AssemblyName 'System.Web'
-    return [System.Web.Security.Membership]::GeneratePassword($length)
+    if ($PwdCheck -eq $false) {
+        $Password = Get-Content $LTSvc\BiosPW.txt
+        Set-Item -Path DellSmBios:\Security\AdminPassword $Password
+    }
+    else {
+        Get-ComputerInfo | Select-Object -ExpandProperty CsName | Out-File c:\temp\bitlockerpwlog.txt -append
+        return "Bios password detected it's borked"
+    }
+
 }
 
-Create-Password 10
+Set-BiosAdminPassword -$Password

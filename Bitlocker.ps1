@@ -110,32 +110,22 @@ Import-Module DellBiosProvider -Verbose
 
 
 #GetBiosAdminPassword
-
 $AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
 $PwdCheck = $AdminPasswordCheck
 
-
-function Create-Password{
-
-    param (
-        [Parameter(Mandatory)]
-        [int]$length
-    )
-    Add-Type -AssemblyName 'System.Web'
-    return [System.Web.Security.Membership]::GeneratePassword($length)
-}
-
-Create-Password 10
+#GeneratePassword
+$DinoPass = "https://www.dinopass.com/password/strong"
+$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
+$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
 
 
 #SetBiosAdminPassword
 function Set-BiosAdminPassword {
-   
     param(
-        [SecureString]$Password
+        [String]$Password
     )
-
     if ($PwdCheck -eq $false) {
+        $Password = Get-Content $LTSvc\BiosPW.txt
         Set-Item -Path DellSmBios:\Security\AdminPassword $Password
     }
     else {
@@ -145,7 +135,7 @@ function Set-BiosAdminPassword {
 
 }
 
-Set-BiosAdminPassword -Password AVeryStrongPassword
+Set-BiosAdminPassword -$Password
 
 
 
