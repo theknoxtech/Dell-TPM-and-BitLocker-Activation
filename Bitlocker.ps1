@@ -2,7 +2,7 @@
 $LTSvc = "C:\Windows\LTSvc\packages"
 
 #Start Transcript
-# Start-Transcript -Path $LTSvc -Verbose
+Start-Transcript -Path $LTSvc -Verbose
 
 #Bitlocker Check
 function IsVolumeEncrypted {
@@ -65,6 +65,40 @@ function Get-TPMState {
     return $TPMState
 }
 
+# Check if C++ Runtimes are installed and if not install C++ 2010 and C++ 2015-2022
+function VCChecks {
+    # C++ Runtime Logic
+    # Check for c++ redistribution packages
+    Write-Host "Loading installed applications..." -ForegroundColor Yellow
+    $products = Get-CimInstance win32_product
+    Write-Host "Complete" -ForegroundColor Green
+
+    # C++ 2010 Redistributable
+    Write-Host "Checking for 'Microsoft Visual C++ 2010 Redistributable'..." -ForegroundColor Yellow
+    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*Redistributable*" })) {
+        Write-Host "`tVC 2010 Redistributable detected!" -ForegroundColor Green
+    }
+    # Handle install logic
+    else {
+        Write-Host "`tInstalling Microsoft Visual C++ 2010 Redistributable..." -ForegroundColor Yellow
+        Install-VCRedist2010
+        Write-Host "`tComplete" -ForegroundColor Green
+    }
+
+    # C++ 2022 Redistributable
+    Write-Host "Checking for 'Microsoft Visual C++ 2022 Runtime'..." -ForegroundColor Yellow
+    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
+        Write-Host "`tVC 2022 Runtime detected!" -ForegroundColor Green
+    }
+    # Handle install logic
+    else {
+        Write-Host "`tInstalling Microsoft Visual C++ 2022 Runtime..." -ForegroundColor Yellow
+        Install-VCRedist2022
+        Write-Host "`tComplete" -ForegroundColor Green
+    }
+}
+
+
 
 #Redistributable 2010
 function Install-VCRedist2010 {
@@ -111,6 +145,7 @@ function GenerateRandomPassword
     return $password
 }
 
+#TODO Update Set-BiosAdminPassword function with GenerateRandomPassword
 function Set-BiosAdminPassword {
     Param(
         [Parameter(Mandatory=$true)]
@@ -127,44 +162,40 @@ function Set-BiosAdminPassword {
 
 }
 
-#### SCRIPT FUNCTIONS ####
-function VCChecks
-{
-    # C++ Runtime Logic
-    # Check for c++ redistribution packages
-    Write-Host "Loading installed applications..." -ForegroundColor Yellow
-    $products = Get-CimInstance win32_product
-    Write-Host "Complete" -ForegroundColor Green
+#If volume is unencrypted and TPM is ready then enable Bitlocker
+function Set-ERGBitlocker {
 
-    # C++ 2010 Redistributable
-    Write-Host "Checking for 'Microsoft Visual C++ 2010 Redistributable'..." -ForegroundColor Yellow
-    if (($products | Where-Object {$_.name -like "Microsoft Visual C++ 2010*Redistributable*"}))
-    {
-        Write-Host "`tVC 2010 Redistributable detected!" -ForegroundColor Green
-    }
-    # Handle install logic
-    else
-    {
-        Write-Host "`tInstalling Microsoft Visual C++ 2010 Redistributable..." -ForegroundColor Yellow
-        Install-VCRedist2010
-        Write-Host "`tComplete" -ForegroundColor Green
+    $tpm = Get-TPMState
+
+    $bitlocker_options = @{
+
+        MountPoint       = "C:"
+        EncryptionMethod = "XtsAes128"
+        TpmProtector     = $true
+        UsedSpaceOnly    = $true
+        SkipharwareTest  = $true
+
     }
 
-    # C++ 2022 Redistributable
-    Write-Host "Checking for 'Microsoft Visual C++ 2022 Runtime'..." -ForegroundColor Yellow
-    if (($products | Where-Object {$_.name -like "Microsoft Visual C++ 2022*"}))
-    {
-        Write-Host "`tVC 2022 Runtime detected!" -ForegroundColor Green
+    if ((!(IsVolumeEncrypted)) -and $tpm.CheckTPMReady()) {
+
+        try {
+            
+            Enable-Bitlocker @bitlocker_options
+        }
+        catch {
+
+            throw "There was an issue enabling Bitlocker. Please try again" 
+        }   
     }
-    # Handle install logic
-    else
-    {
-        Write-Host "`tInstalling Microsoft Visual C++ 2022 Runtime..." -ForegroundColor Yellow
-        Install-VCRedist2022
-        Write-Host "`tComplete" -ForegroundColor Green
-    }
+
 }
 
+
+
+###SCRIPT###
+
+# Execution Policy Check
 if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass")
 {
     try {
@@ -175,9 +206,6 @@ if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass"
     }
 }
 
-#TODO : Write try-catch block for DellBiosProvider install
-Install-Module -Name DellBIOSProvider -Force
-Import-Module DellBiosProvider -Verbose
 
 # BIOS Version
     # Upgrade BIOS if not up to date
@@ -185,6 +213,8 @@ Import-Module DellBiosProvider -Verbose
     {
         throw "BIOS Version does not meet minimum requirements: Upgrade BIOS Version"
     }
+
+
 # Bitlocker Validation
 # If Bitlocker is enabled, abort with success!
 if (IsVolumeEncrypted -DriveLetter C)
@@ -196,20 +226,26 @@ else {
     Write-Host "Bitlocker not enabled" -ForegroundColor Red
 }
 
+
 # TPM Logic if Bitlocker not Enabled
 $TPMState = Get-TPMState
 if ($TPMState.CheckTPMReady())
 {
     Write-Host "TPM is Ready!" -ForegroundColor Green
 }
-# TPM Logic if Bitlocker not Enabled
-# TODO: Write logic to enable / repair TPM using Dell BIOS package
+#TODO TPM Logic if Bitlocker not Enabled
+#TODO: Write logic to enable / repair TPM using Dell BIOS package
 else {
     throw "TPM requires modification: $($TPMState)"
 }
 
 # C++ Runtime Libraries
 VCChecks
+
+#TODO : Write try-catch block for DellBiosProvider install
+Install-Module -Name DellBIOSProvider -Force
+Import-Module DellBiosProvider -Verbose
+
 
 # Set BIOS Password
 if (IsBIOSPasswordSet)
@@ -220,7 +256,7 @@ else
 {
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
 }
-    # Enable Bitlocker
-        # Backup Bitlocker key
-    # Remove BIOS Password
-    # Delete BiosPW.txt file
+#TODO# Enable Bitlocker
+#TODO        # Backup Bitlocker key
+#TODO    # Remove BIOS Password
+#TODO    # Delete BiosPW.txt file
