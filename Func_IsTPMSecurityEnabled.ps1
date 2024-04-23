@@ -22,4 +22,9 @@ function IsTPMSecurityEnabled {
         
     return (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
 }
-IsTPMSecurityEnabled
+
+$tpm = (Get-TPMState).IsEnabled
+
+if ($tpm) {
+    return $tpm
+}

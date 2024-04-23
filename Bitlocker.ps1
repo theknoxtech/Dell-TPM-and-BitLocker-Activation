@@ -202,17 +202,20 @@ function Add-RecoveryKeyProtector {
 
 # Check if TPM Security is enabled in the BIOS
 function IsTPMSecurityEnabled {
-    $tpm = Get-TPMState
+        
+    return (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
+}
 
-    if (!($tpm.CheckTPMReady())){
-        (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
-    }
-    return IsTPMSecurityEnabled
+# Check if TPM is Activated in the BIOS
+#TODO Find out if TPMActivation is not in the BIOS if it is already enabled
+function IsTPMActivated{
 
+    
 }
 
 
 
+#####################
 ###SCRIPTFUNCTIONS###
 
 # Execution Policy Check
@@ -270,7 +273,7 @@ VCChecks
 if (!(Get-SMBiosRequiresUpgrade) -and $TPMState.CheckTPMReady()){
 
     try {
-        Install-Module -Name DellBiosProvider -Force
+        Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
         Import-Module DellBiosProvider -Verbose
     }
     catch {
@@ -290,6 +293,23 @@ else
 {
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
 }
+
+# Enable TPM scurity in the Bios REBOOT REQUIRED
+$tpm_security = IsTPMSecurityEnabled
+$bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
+if ($tpm_security)
+{
+    Write-Host "TPM security is enabled in the BIOS" -ForegroundColor Green
+}
+else 
+{
+    Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity "Enabled" -Password $bios_pw
+}
+
+#Enable TPM Activation in the BIOS
+if ($tpm_security)
+
+
 
 
 
