@@ -200,9 +200,20 @@ function Add-RecoveryKeyProtector {
     }
 }
 
+# Check if TPM Security is enabled in the BIOS
+function IsTPMSecurityEnabled {
+    $tpm = Get-TPMState
+
+    if (!($tpm.CheckTPMReady())){
+        (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
+    }
+    return IsTPMSecurityEnabled
+
+}
 
 
-###SCRIPT###
+
+###SCRIPTFUNCTIONS###
 
 # Execution Policy Check
 if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass")
@@ -254,15 +265,20 @@ else {
 # C++ Runtime Libraries
 VCChecks
 
-#TODO : Write try-catch block for DellBiosProvider install
+#Install DellBiosProvider
 
 if (!(Get-SMBiosRequiresUpgrade) -and $TPMState.CheckTPMReady()){
 
+    try {
+        Install-Module -Name DellBiosProvider -Force
+        Import-Module DellBiosProvider -Verbose
+    }
+    catch {
+        throw "DellBiosProvider was NOT installed. Please try again."
+    }
 
 }
 
-Install-Module -Name DellBIOSProvider -Force
-Import-Module DellBiosProvider -Verbose
 
 
 # Set BIOS Password
@@ -274,6 +290,10 @@ else
 {
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
 }
+
+
+
+
 #TODO# Enable Bitlocker
 #TODO        # Backup Bitlocker key
 #TODO    # Remove BIOS Password
