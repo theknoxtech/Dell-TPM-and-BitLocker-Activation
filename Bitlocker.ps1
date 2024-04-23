@@ -173,7 +173,7 @@ function Set-ERGBitlocker {
         EncryptionMethod = "XtsAes128"
         TpmProtector     = $true
         UsedSpaceOnly    = $true
-        SkipharwareTest  = $true
+        SkiphardwareTest  = $true
 
     }
 
@@ -185,10 +185,19 @@ function Set-ERGBitlocker {
         }
         catch {
 
-            throw "There was an issue enabling Bitlocker. Please try again" 
+            throw "Bitlocker was not enabled. Check TPM and try again" 
         }   
     }
 
+}
+
+# If Bitlocker is enabled, then add recovery password protector
+#TODO Add check for existing key?
+function Add-RecoveryKeyProtector {
+    
+    if (IsVolumeEncrypted) {
+        Add-BitLockerKeyProtector -MountPoint "C:" -RecoveryPasswordProtector
+    }
 }
 
 
@@ -217,14 +226,17 @@ if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass"
 
 # Bitlocker Validation
 # If Bitlocker is enabled, abort with success!
+# TODO Does a return need to be put here
 if (IsVolumeEncrypted -DriveLetter C)
 {
-    Write-Host "Bitlocker Enabled!" -ForegroundColor Green
-    return
+    Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
+    
 }
 else {
     Write-Host "Bitlocker not enabled" -ForegroundColor Red
+    
 }
+
 
 
 # TPM Logic if Bitlocker not Enabled
@@ -243,6 +255,12 @@ else {
 VCChecks
 
 #TODO : Write try-catch block for DellBiosProvider install
+
+if (!(Get-SMBiosRequiresUpgrade) -and $TPMState.CheckTPMReady()){
+
+
+}
+
 Install-Module -Name DellBIOSProvider -Force
 Import-Module DellBiosProvider -Verbose
 

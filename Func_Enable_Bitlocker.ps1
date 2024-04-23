@@ -35,19 +35,21 @@ function Get-TPMState {
 }
 
 
-funtion Set-Bitlocker {
+function Set-ERGBitlocker {
 
+    $tpm = Get-TPMState
 
     $bitlocker_options = @{
 
-        MountPoint                = "C:"
-        EncryptionMethod          = "XtsAes128"
-        TpmProtector              = $true
-        UsedSpaceOnly             = $true
+        MountPoint       = "C:"
+        EncryptionMethod = "XtsAes128"
+        TpmProtector     = $true
+        UsedSpaceOnly    = $true
+        SkiphardwareTest  = $true
 
     }
 
-    if (IsVolumeEncrypted -eq $false -and $TPMState.CheckTPMReady() -eq $true) {
+    if ((!(IsVolumeEncrypted)) -and $tpm.CheckTPMReady()) {
 
         try {
             
@@ -57,7 +59,7 @@ funtion Set-Bitlocker {
 
             throw "There was an issue enabling Bitlocker. Please try again" 
         }   
-}
+    }
 
 }
 
