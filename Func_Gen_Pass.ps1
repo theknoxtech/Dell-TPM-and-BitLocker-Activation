@@ -1,30 +1,42 @@
-$LTSvc = "C:\Windows\LTSvc\packages"
+#$LTSvc = "C:\Windows\LTSvc\Packages"
 
-$AdminPasswordCheck = Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet | Select-Object -ExpandProperty CurrentValue
-$PwdCheck = $AdminPasswordCheck
+function IsBIOSPasswordSet {
+    return (Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue
+}
 
-$DinoPass = "https://www.dinopass.com/password/strong"
-$GeneratePW = Invoke-WebRequest -Uri $DinoPass | Select-Object -ExpandProperty Content 
-$GeneratePW | Out-File -FilePath $LTSvc\BiosPW.txt
-
-
-
-
-
-#SetBiosAdminPassword
-function Set-BiosAdminPassword {
-    param(
-        [String]$Password
+function GenerateRandomPassword {
+    Param(
+        [switch]$SaveToFile
     )
-    if ($PwdCheck -eq $false) {
-        $Password = Get-Content $LTSvc\BiosPW.txt
-        Set-Item -Path DellSmBios:\Security\AdminPassword $Password
+
+    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content
+
+    if ($SaveToFile) {
+        $password | Out-File $LTSvc\BiosPW.txt
     }
-    else {
-        Get-ComputerInfo | Select-Object -ExpandProperty CsName | Out-File c:\temp\bitlockerpwlog.txt -append
-        return "Bios password detected it's borked"
-    }
+    
+    return $password
+}
+
+#TODO Update Set-BiosAdminPassword function with GenerateRandomPassword
+function Set-BiosAdminPassword {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Password
+    )
+    $Password = Get-Content $LTSvc\BiosPW.txt
+    Set-Item -Path DellSmBios:\Security\AdminPassword $Password
+   
 
 }
 
-Set-BiosAdminPassword -$Password
+###SCRIPTFUNCTION####
+
+if (IsBIOSPasswordSet) {
+
+    Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
+}
+else {
+
+    throw "BIOS Password already set: Clear BIOS password before proceeding"
+}

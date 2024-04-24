@@ -124,41 +124,34 @@ function Install-VCRedist2022 {
     Set-Location $working_dir
 }
 
-function IsBIOSPasswordSet
-{
+function IsBIOSPasswordSet {
     return (Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue
 }
 
-function GenerateRandomPassword
-{
+# Generates a random passowrd from Dinopass to pass to Set-BiosAdminPassword - TESTED
+function GenerateRandomPassword {
     Param(
         [switch]$SaveToFile
     )
 
     $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content
 
-    if($SaveToFile)
-    {
+    if ($SaveToFile) {
         $password | Out-File $LTSvc\BiosPW.txt
     }
     
     return $password
 }
 
-#TODO Update Set-BiosAdminPassword function with GenerateRandomPassword
+# Update Set-BiosAdminPassword function with GenerateRandomPassword - TESTED
 function Set-BiosAdminPassword {
     Param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$Password
     )
-    if ($PwdCheck -eq $false) {
-        $Password = Get-Content $LTSvc\BiosPW.txt
-        Set-Item -Path DellSmBios:\Security\AdminPassword $Password
-    }
-    else {
-        Get-ComputerInfo | Select-Object -ExpandProperty CsName | Out-File c:\temp\bitlockerpwlog.txt -append
-        return "Bios password detected it's borked"
-    }
+    $Password = Get-Content $LTSvc\BiosPW.txt
+    Set-Item -Path DellSmBios:\Security\AdminPassword $Password
+   
 
 }
 
@@ -192,7 +185,6 @@ function Set-ERGBitlocker {
 }
 
 # If Bitlocker is enabled, then add recovery password protector
-#TODO Add check for existing key?
 function Add-RecoveryKeyProtector {
     
     if (IsVolumeEncrypted) {
@@ -200,16 +192,16 @@ function Add-RecoveryKeyProtector {
     }
 }
 
-# Check if TPM Security is enabled in the BIOS
+# Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
         
     return (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
 }
 
-# Check if TPM is Activated in the BIOS
-#TODO Find out if TPMActivation is not in the BIOS if it is already enabled
+# Check if TPM is Activated in the BIOS - Returns Enabled or Disabled
 function IsTPMActivated{
 
+    return (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
     
 }
 
@@ -232,6 +224,7 @@ if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass"
 
 # BIOS Version
     # Upgrade BIOS if not up to date
+    # Dell CMD script for upgrades exists
     if (Get-SMBiosRequiresUpgrade)
     {
         throw "BIOS Version does not meet minimum requirements: Upgrade BIOS Version"
@@ -259,11 +252,15 @@ if ($TPMState.CheckTPMReady())
 {
     Write-Host "TPM is Ready!" -ForegroundColor Green
 }
-#TODO TPM Logic if Bitlocker not Enabled
-#TODO: Write logic to enable / repair TPM using Dell BIOS package
-else {
+else 
+{
     throw "TPM requires modification: $($TPMState)"
 }
+
+#TODO TPM Logic if Bitlocker not Enabled
+#TODO: Write logic to enable / repair TPM using Dell BIOS package
+
+
 
 # C++ Runtime Libraries
 VCChecks
@@ -284,30 +281,40 @@ if (!(Get-SMBiosRequiresUpgrade) -and $TPMState.CheckTPMReady()){
 
 
 
-# Set BIOS Password
-if (IsBIOSPasswordSet)
-{
-    throw "BIOS Password already set: Clear BIOS password before proceeding"
-}
-else
-{
+# Set BIOS Password - TESTED
+if (IsBIOSPasswordSet) {
+
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
+}
+else {
+
+    throw "BIOS Password already set: Clear BIOS password before proceeding"
 }
 
 # Enable TPM scurity in the Bios REBOOT REQUIRED
-$tpm_security = IsTPMSecurityEnabled
+
 $bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
-if ($tpm_security)
+if (IsTPMSecurityEnabled)
 {
     Write-Host "TPM security is enabled in the BIOS" -ForegroundColor Green
 }
 else 
 {
-    Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity "Enabled" -Password $bios_pw
+    Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $bios_pw
 }
 
-#Enable TPM Activation in the BIOS
-if ($tpm_security)
+# Enable TPM Activation in the BIOS - REBOOT REQUIRED
+if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
+{
+
+    try {
+        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $bios_pw
+    }
+    catch {
+        throw "TPM NOT enable: Manual remediation required!"
+    }
+
+}
 
 
 
