@@ -155,6 +155,19 @@ function Set-BiosAdminPassword {
 
 }
 
+# Remove BIOS admin password
+
+function Remove-BiosAdminPassword {
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$Password,
+        [string]$CurrentPassword
+    )
+    $Password = ""
+    $CurrentPassword = Get-Content -Path $LTSvc\biospw.txt
+    Set-Item -Path DellSmbios:\Security\AdminPassword $password -Password $CurrentPassword
+}
+
 #If volume is unencrypted and TPM is ready then enable Bitlocker
 function Set-ERGBitlocker {
 
@@ -238,6 +251,7 @@ if (IsVolumeEncrypted -DriveLetter C)
 {
     Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
     
+    
 }
 else {
     Write-Host "Bitlocker not enabled" -ForegroundColor Red
@@ -254,13 +268,9 @@ if ($TPMState.CheckTPMReady())
 }
 else 
 {
-    throw "TPM requires modification: $($TPMState)"
+    Write-Host "TPM check has FAILED attempting to remeditate..." -ForegroundColor Yellow
+    
 }
-
-#TODO TPM Logic if Bitlocker not Enabled
-#TODO: Write logic to enable / repair TPM using Dell BIOS package
-
-
 
 # C++ Runtime Libraries
 VCChecks
@@ -311,8 +321,34 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
         Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $bios_pw
     }
     catch {
-        throw "TPM NOT enable: Manual remediation required!"
+        throw "TPM NOT enabled: Manual remediation required!"
     }
+
+}
+
+# Enable Bitlocker REBOOT REQUIRED
+Set-ERGBitlocker
+
+
+# Add Recovery Key Protector 
+Add-RecoveryKeyProtector 
+
+# Remove Bios Password
+Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -ForegroundColor Yellow
+
+if (IsVolumeEncrypted){
+    
+    try {
+        Remove-BiosAdminPassword -Password -CurrentPassword
+    }
+    catch {
+        throw "BIOS password was NOT removed! Manual Remediation Required!"
+    }
+}
+# Verifying BIOS Password has been removed
+switch (IsBIOSPasswordSet) {
+    $true {"BIOS password is still set"}
+    $false {"Bios Password has been removed"}
 
 }
 
@@ -321,7 +357,5 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
 
 
 
-#TODO# Enable Bitlocker
-#TODO        # Backup Bitlocker key
 #TODO    # Remove BIOS Password
 #TODO    # Delete BiosPW.txt file
