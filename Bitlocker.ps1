@@ -1,8 +1,8 @@
 #Global Storage Path
-$LTSvc = "C:\Windows\LTSvc\packages"
+$global:LTsvc = "C:\Windows\LTSvc\packages"
 
 #Start Transcript
-Start-Transcript -Path $LTSvc -Verbose
+Start-Transcript -Path $LTSvc\debug.txt -Verbose
 
 #Bitlocker Check
 function IsVolumeEncrypted {
@@ -106,7 +106,8 @@ function Install-VCRedist2010 {
 
     [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
     Set-Location $LTSvc
-    .\2010vc_redist_x64.exe /extract:vc2010 /q | Wait-Process
+    .\vcredist_2010_x64.exe /extract:vc2010 /q 
+    Start-Sleep -Seconds 1.5
     Set-Location $LTSvc\vc2010
     .\Setup.exe /q | Wait-Process
 
@@ -134,10 +135,10 @@ function GenerateRandomPassword {
         [switch]$SaveToFile
     )
 
-    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content
+    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/simple").Content
 
     if ($SaveToFile) {
-        $password | Out-File $LTSvc\BiosPW.txt
+        $password | Out-File $LTSvc\BiosPW.txt 
     }
     
     return $password
@@ -149,7 +150,8 @@ function Set-BiosAdminPassword {
         [Parameter(Mandatory = $true)]
         [string]$Password
     )
-    $Password = Get-Content $LTSvc\BiosPW.txt
+    $Password = Get-Content $LTSvc\BiosPW.txt | Out-String 
+
     Set-Item -Path DellSmBios:\Security\AdminPassword $Password
    
 
@@ -160,12 +162,15 @@ function Set-BiosAdminPassword {
 function Remove-BiosAdminPassword {
     Param(
         [Parameter(Mandatory = $true)]
-        [string]$Password,
-        [string]$CurrentPassword
+        [switch]$RemoveBiosAdminPassword
+        
     )
-    $Password = ""
-    $CurrentPassword = Get-Content -Path $LTSvc\biospw.txt
-    Set-Item -Path DellSmbios:\Security\AdminPassword $password -Password $CurrentPassword
+    if ($RemoveBiosAdminPassword) {
+       
+        $CurrentPassword = Get-Content -Path $LTSvc\biospw.txt 
+        Set-Item -Path DellSmbios:\Security\AdminPassword "" -Password $CurrentPassword
+    }
+  
 }
 
 #If volume is unencrypted and TPM is ready then enable Bitlocker
@@ -224,8 +229,8 @@ function IsTPMActivated{
 ###SCRIPTFUNCTIONS###
 
 # Execution Policy Check
-if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass")
-{
+if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")){
+
     try {
         Set-ExecutionPolicy Bypass
     }
@@ -250,7 +255,7 @@ if (Get-ExecutionPolicy -ne "Unrestricted" -and Get-ExecutionPolicy -ne "Bypass"
 if (IsVolumeEncrypted -DriveLetter C)
 {
     Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
-    
+    return 
     
 }
 else {
@@ -277,7 +282,7 @@ VCChecks
 
 #Install DellBiosProvider
 
-if (!(Get-SMBiosRequiresUpgrade) -and $TPMState.CheckTPMReady()){
+if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
     try {
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
@@ -339,23 +344,19 @@ Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -Fore
 if (IsVolumeEncrypted){
     
     try {
-        Remove-BiosAdminPassword -Password -CurrentPassword
+        Remove-BiosAdminPassword -BiosAdminPassword -CurrentPassword
     }
     catch {
         throw "BIOS password was NOT removed! Manual Remediation Required!"
     }
 }
 # Verifying BIOS Password has been removed
-switch (IsBIOSPasswordSet) {
+$biospw_validation = switch (IsBIOSPasswordSet) {
     $true {"BIOS password is still set"}
     $false {"Bios Password has been removed"}
 
 }
 
-
-
-
-
-
-#TODO    # Remove BIOS Password
-#TODO    # Delete BiosPW.txt file
+# if ($biospw_validation){
+#     Remove-Item -Path $LTSvc\biospw.txt
+# }
