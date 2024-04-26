@@ -6,12 +6,12 @@ Start-Transcript -Path $LTSvc\debug.txt -Verbose
 
 #Bitlocker Check
 function IsVolumeEncrypted {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [char]$DriveLetter
-    )
+    # Param(
+    #     [Parameter(Mandatory=$true)]
+    #     [char]$DriveLetter
+    # )
 
-    $volume_status = (Get-BitLockerVolume -MountPoint "$($DriveLetter):" -ErrorAction SilentlyContinue).VolumeStatus
+    $volume_status = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
 
     if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress")
     {
@@ -162,10 +162,10 @@ function Set-BiosAdminPassword {
 function Remove-BiosAdminPassword {
     Param(
         [Parameter(Mandatory = $true)]
-        [switch]$RemoveBiosAdminPassword
+        [switch]$RemovePassword
         
     )
-    if ($RemoveBiosAdminPassword) {
+    if ($RemovePassword) {
        
         $CurrentPassword = Get-Content -Path $LTSvc\biospw.txt 
         Set-Item -Path DellSmbios:\Security\AdminPassword "" -Password $CurrentPassword
@@ -252,10 +252,9 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
 # Bitlocker Validation
 # If Bitlocker is enabled, abort with success!
 # TODO Does a return need to be put here
-if (IsVolumeEncrypted -DriveLetter C)
+if (IsVolumeEncrypted)
 {
     Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
-    return 
     
 }
 else {
@@ -270,6 +269,7 @@ $TPMState = Get-TPMState
 if ($TPMState.CheckTPMReady())
 {
     Write-Host "TPM is Ready!" -ForegroundColor Green
+    
 }
 else 
 {
@@ -344,7 +344,7 @@ Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -Fore
 if (IsVolumeEncrypted){
     
     try {
-        Remove-BiosAdminPassword -BiosAdminPassword -CurrentPassword
+        Remove-BiosAdminPassword -RemovePassword
     }
     catch {
         throw "BIOS password was NOT removed! Manual Remediation Required!"
