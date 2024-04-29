@@ -130,18 +130,21 @@ function IsBIOSPasswordSet {
 }
 
 # Generates a random passowrd from Dinopass to pass to Set-BiosAdminPassword - TESTED
+# Replaces symbols with "_"
 function GenerateRandomPassword {
     Param(
         [switch]$SaveToFile
     )
 
-    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/simple").Content
+    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/simple").Content 
+    $replaced_password = $password -replace "\W", '_'
 
     if ($SaveToFile) {
-        $password | Out-File $LTSvc\BiosPW.txt 
+
+        $replaced_password | Out-File $LTSvc\BiosPW.txt 
     }
     
-    return $password
+    return $replaced_password
 }
 
 # Update Set-BiosAdminPassword function with GenerateRandomPassword - TESTED
@@ -150,7 +153,7 @@ function Set-BiosAdminPassword {
         [Parameter(Mandatory = $true)]
         [string]$Password
     )
-    $Password = Get-Content $LTSvc\BiosPW.txt | Out-String 
+    $Password = Get-Content $LTSvc\BiosPW.txt 
 
     Set-Item -Path DellSmBios:\Security\AdminPassword $Password
    
