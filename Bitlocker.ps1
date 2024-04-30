@@ -6,11 +6,7 @@ Start-Transcript -Path $LTSvc\debug.txt -Verbose
 
 #Bitlocker Check
 function IsVolumeEncrypted {
-    # Param(
-    #     [Parameter(Mandatory=$true)]
-    #     [char]$DriveLetter
-    # )
-
+ 
     $volume_status = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
 
     if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress")
@@ -212,6 +208,7 @@ function Add-RecoveryKeyProtector {
     
 }
 
+# Gets the Bitlocker recovery key
 function Get-RecoveryKey {
 
     $key = (Get-BitLockerVolume -MountPoint "C:").KeyProtector.recoverypassword
@@ -293,6 +290,8 @@ VCChecks
 
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
+    Write-Host "Attempting to install DellBiosProvider...." -ForegroundColor Yellow
+
     try {
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
         Import-Module DellBiosProvider -Verbose
@@ -301,26 +300,36 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
         throw "DellBiosProvider was NOT installed. Please try again."
     }
 
+    Write-Host "DellBiosProvider installed successfully!" -ForegroundColor Green
+
 }elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
 
     Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
     try {
+
         Set-ERGBitlocker
         
     }
     catch {
         throw "Bitlocker was NOT enabled"
     }
+
+    Write-Host "Bitlocker is enabled. REBOOT REQUIRED"
+
 }
-
-
-
+###
+#REBOOT REQUIRED here if Bitlocker is enabled above
+##
 
 
 # Set BIOS Password - TESTED
 if (!(IsBIOSPasswordSet)) {
+    Write-Host "Setting BIOS password...." -ForegroundColor Yellow
 
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
+
+    Write-Host "Passowrd has been saved at: C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green
+
 }
 else {
 
@@ -387,7 +396,7 @@ if (IsVolumeEncrypted){
         throw "Reovery Key could NOT be added! Manual remediation required!"
     }
     
-    Write-Host "Operation complete...." -ForegroundColor Yellow
+    Write-Host "`t\Operation complete...." -ForegroundColor Yellow
 
     return Get-RecoveryKey
 
@@ -417,3 +426,4 @@ if (IsVolumeEncrypted) {
 }
 
 
+Stop-Transcript
