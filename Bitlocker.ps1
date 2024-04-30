@@ -209,6 +209,13 @@ function Add-RecoveryKeyProtector {
     if (IsVolumeEncrypted) {
         Add-BitLockerKeyProtector -MountPoint "C:" -RecoveryPasswordProtector
     }
+    
+}
+
+function Get-RecoveryKey {
+
+    $key = (Get-BitLockerVolume -MountPoint "C:").KeyProtector.recoverypassword
+    return $key
 }
 
 # Check if TPM Security is enabled in the BIOS - Returns True or False
@@ -350,14 +357,43 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
 ##
 
 # Enable Bitlocker 
-Set-ERGBitlocker
+if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")){
+    Write-Host "Attempting to enable Bitlocker...." -ForegroundColor Yellow
+
+    Set-ERGBitlocker
+
+    Write-Host "`t\Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Green
+
+}else{
+
+    throw "Bitlocker was NOT enabled! Manual remediation required!"
+}
+
 
 ##
 # REBOOT REQUIRED HERE
 ##
 
 # Add Recovery Key Protector 
-Add-RecoveryKeyProtector 
+if (IsVolumeEncrypted){
+
+
+    Write-Host "Attempting to add recovery key protector...." -ForegroundColor Yellow
+
+    try {
+        Add-RecoveryKeyProtector
+    }
+    catch {
+        throw "Reovery Key could NOT be added! Manual remediation required!"
+    }
+    
+    Write-Host "Operation complete...." -ForegroundColor Yellow
+
+    return Get-RecoveryKey
+
+}
+
+
 
 # Remove Bios Password
 Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -ForegroundColor Yellow
@@ -365,19 +401,19 @@ Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -Fore
 if (IsVolumeEncrypted) {
     
     $biospw_validation = IsBIOSPasswordSet
-    
+    Write-Host "Attempting bios password removal...." -ForegroundColor Yellow
     try {
-        Write-Host "Attempting bios password removal...." -ForegroundColor Yellow
-
+        
         Remove-BiosAdminPassword -RemovePassword $current_password
-
-        Write-Host "Operation complete...." -ForegroundColor Yellow
-   
-        Write-Host "Bios Password has been removed :" $biospw_validation -ForegroundColor Green
     }
     catch {
-        throw "BIOS password was NOT removed! Check C:\Windows\LTSvc\packages\biospw.txt"
+        throw "BIOS password was NOT removed! Manual Remediation Required!"
     }
+    
+    Write-Host "Operation complete...." -ForegroundColor Yellow
+   
+    Write-Host "Bios Password has been removed :" $biospw_validation -ForegroundColor Green
+
 }
 
 
