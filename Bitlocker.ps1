@@ -136,7 +136,7 @@ function GenerateRandomPassword {
         [switch]$SaveToFile
     )
 
-    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/simple").Content 
+    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content 
     $replaced_password = $password -replace "\W", '_'
 
     if ($SaveToFile) {
@@ -161,18 +161,16 @@ function Set-BiosAdminPassword {
 }
 
 # Remove BIOS admin password
-
 function Remove-BiosAdminPassword {
     Param(
         [Parameter(Mandatory = $true)]
-        [switch]$RemovePassword
+        [string]$RemovePassword
         
     )
-    if ($RemovePassword) {
-       
-        $CurrentPassword = Get-Content -Path $LTSvc\biospw.txt 
-        Set-Item -Path DellSmbios:\Security\AdminPassword "" -Password $CurrentPassword
-    }
+      
+    $current_password = Get-Content -Path $LTSvc\biospw.txt 
+    Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $current_password
+
   
 }
 
@@ -254,11 +252,12 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
 
 # Bitlocker Validation
 # If Bitlocker is enabled, abort with success!
-# TODO Does a return need to be put here
+# TODO Add check for recovery key protector
 if (IsVolumeEncrypted)
 {
     Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
     
+    return IsVolumeEncrypted
 }
 else {
     Write-Host "Bitlocker not enabled" -ForegroundColor Red
@@ -295,12 +294,24 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
         throw "DellBiosProvider was NOT installed. Please try again."
     }
 
+}elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
+
+    Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
+    try {
+        Set-ERGBitlocker
+        
+    }
+    catch {
+        throw "Bitlocker was NOT enabled"
+    }
 }
 
 
 
+
+
 # Set BIOS Password - TESTED
-if (IsBIOSPasswordSet) {
+if (!(IsBIOSPasswordSet)) {
 
     Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
 }
@@ -309,7 +320,7 @@ else {
     throw "BIOS Password already set: Clear BIOS password before proceeding"
 }
 
-# Enable TPM scurity in the Bios REBOOT REQUIRED
+# Enable TPM scurity in the Bios
 
 $bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
 if (IsTPMSecurityEnabled)
@@ -321,7 +332,7 @@ else
     Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $bios_pw
 }
 
-# Enable TPM Activation in the BIOS - REBOOT REQUIRED
+# Enable TPM Activation in the BIOS
 if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
 {
 
@@ -334,9 +345,16 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
 
 }
 
-# Enable Bitlocker REBOOT REQUIRED
+##
+# REBOOT REQUIRED HERE
+##
+
+# Enable Bitlocker 
 Set-ERGBitlocker
 
+##
+# REBOOT REQUIRED HERE
+##
 
 # Add Recovery Key Protector 
 Add-RecoveryKeyProtector 
@@ -344,22 +362,21 @@ Add-RecoveryKeyProtector
 # Remove Bios Password
 Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -ForegroundColor Yellow
 
-if (IsVolumeEncrypted){
+if (IsVolumeEncrypted) {
     
+    
+    Write-Host "Attempting bios password removal...."
     try {
-        Remove-BiosAdminPassword -RemovePassword
+    
+        Remove-BiosAdminPassword -RemovePassword $current_password
     }
     catch {
         throw "BIOS password was NOT removed! Manual Remediation Required!"
     }
-}
-# Verifying BIOS Password has been removed
-$biospw_validation = switch (IsBIOSPasswordSet) {
-    $true {"BIOS password is still set"}
-    $false {"Bios Password has been removed"}
 
+    Write-Host "Operation complete....Removal status is:" -ForegroundColor Yellow
+    IsBIOSPasswordSet
+    Write-Host "Bios Password has been removed" -ForegroundColor Green
 }
 
-# if ($biospw_validation){
-#     Remove-Item -Path $LTSvc\biospw.txt
-# }
+
