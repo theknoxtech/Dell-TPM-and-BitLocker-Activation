@@ -364,19 +364,20 @@ Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password" -Fore
 
 if (IsVolumeEncrypted) {
     
+    $biospw_validation = IsBIOSPasswordSet
     
-    Write-Host "Attempting bios password removal...."
     try {
-    
+        Write-Host "Attempting bios password removal...." -ForegroundColor Yellow
+
         Remove-BiosAdminPassword -RemovePassword $current_password
+
+        Write-Host "Operation complete...." -ForegroundColor Yellow
+   
+        Write-Host "Bios Password has been removed :" $biospw_validation -ForegroundColor Green
     }
     catch {
-        throw "BIOS password was NOT removed! Manual Remediation Required!"
+        throw "BIOS password was NOT removed! Check C:\Windows\LTSvc\packages\biospw.txt"
     }
-
-    Write-Host "Operation complete....Removal status is:" -ForegroundColor Yellow
-    IsBIOSPasswordSet
-    Write-Host "Bios Password has been removed" -ForegroundColor Green
 }
 
 
