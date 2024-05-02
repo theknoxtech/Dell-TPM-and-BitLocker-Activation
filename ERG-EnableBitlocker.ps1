@@ -2,7 +2,7 @@
 $global:LTsvc = "C:\Windows\LTSvc\packages"
 
 #Start Transcript
-Start-Transcript -Path $LTSvc\debug.txt -Verbose
+Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
 
 #Bitlocker Check
 function IsVolumeEncrypted {
@@ -425,5 +425,17 @@ if (IsVolumeEncrypted) {
 
 }
 
+# Remove BiosPW.txt
+if (IsBIOSPasswordSet){
+    Write-Host "Attempting to delete BiosPW.txt" -ForegroundColor Yellow
+
+    throw "Remove the BIOS password before deleting the file!"
+
+}else {
+    
+    Remove-Item -Path $LTSvc\Biospw.txt -Force
+    
+    Write-Host "Biospw.txt has been successfully removed!" -ForegroundColor Green
+}
 
 Stop-Transcript
