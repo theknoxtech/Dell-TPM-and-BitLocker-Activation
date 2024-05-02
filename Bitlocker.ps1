@@ -125,6 +125,7 @@ function IsBIOSPasswordSet {
     return (Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue
 }
 
+
 # Generates a random passowrd from Dinopass to pass to Set-BiosAdminPassword - TESTED
 # Replaces symbols with "_"
 function GenerateRandomPassword {
