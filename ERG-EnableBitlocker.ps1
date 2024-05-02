@@ -257,7 +257,6 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
 
 # Bitlocker Validation
 # If Bitlocker is enabled, abort with success!
-# TODO Add check for recovery key protector
 if (IsVolumeEncrypted)
 {
     Write-Host "Bitlocker Enabled! Exiting script" -ForegroundColor Green
