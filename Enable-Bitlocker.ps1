@@ -293,22 +293,35 @@ elseif ((IsVolumeEncrypted) -and (!(Get-RecoveryKey))) {
     Add-RecoveryKeyProtector
 
     Write-Host "Recovery key added..." -ForegroundColor Green
-    return Get-RecoveryKey  
+    return 
 }
 
 
 # TPM Logic if Bitlocker not enabled
 $TPMState = Get-TPMState
-if ($TPMState.CheckTPMReady())
+if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
 {
-    Write-Host "TPM is ready!" -ForegroundColor Green
+    Write-Host "TPM is ready! Attempting to enable Bitlocker......" -ForegroundColor Green
+    try {
+
+        Set-ERGBitlocker
+        
+        Write-Host "Attempting to add recovery password...." -ForegroundColor Yellow
+
+        Add-RecoveryKeyProtector
+
+        Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Green
+    }
+    catch {
+        throw "Bitlocker was not enabled."
+    }
     
-}
-else 
-{
+}elseif (!($TPMstate.CheckTPMReady())) {
+
     Write-Host "TPM check has failed! Attempting to remeditate..." -ForegroundColor Yellow
-    
-}
+
+} 
+# REBOOT REQUIRED here if Bitlocker is enabled above
 
 # Visual C++ Runtime Libraries
 VCChecks
@@ -336,12 +349,16 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
         Set-ERGBitlocker
         
+        Write-Host "Attempting to add recovery password...." -ForegroundColor Yellow
+
+        Add-RecoveryKeyProtector
     }
     catch {
         throw "Bitlocker was not enabled."
     }
 
     Write-Host "Bitlocker enabled. REBOOT REQUIRED!"
+    return 
 
 }
 
@@ -396,6 +413,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")){
 
     Set-ERGBitlocker
 
+
     Write-Host "`t\Bitlocker enabled. REBOOT REQUIRED!" -ForegroundColor Green
 
 }else{
@@ -403,7 +421,6 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")){
     throw "Bitlocker not enabled. Manual remediation required!"
 }
 
-# REBOOT REQUIRED HERE
 
 # Add Recovery Key Protector 
 if (IsVolumeEncrypted){
@@ -422,6 +439,8 @@ if (IsVolumeEncrypted){
     return Get-RecoveryKey
 
 }
+
+# REBOOT REQUIRED
 
 # Remove BIOS Password
 Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password." -ForegroundColor Yellow
