@@ -311,10 +311,14 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
         Add-RecoveryKeyProtector
 
         Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Green
+
+        return
+       
     }
     catch {
         throw "Bitlocker was not enabled."
     }
+    
     
 }elseif (!($TPMstate.CheckTPMReady())) {
 
