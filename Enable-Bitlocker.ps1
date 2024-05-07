@@ -240,7 +240,8 @@ function Add-RecoveryKeyProtector {
 function Get-RecoveryKey {
 
     $key = (Get-BitLockerVolume -MountPoint "C:").KeyProtector.recoverypassword
-    return $key
+        return $key
+    
 }
 
 # Check if TPM Security is enabled in the BIOS - Returns True or False
@@ -278,17 +279,23 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
     }
 
 # Bitlocker Validation
-# If Bitlocker is enabled, abort with success!
-if (IsVolumeEncrypted)
-{
-    Write-Host "Bitlocker already enabled! Exiting script." -ForegroundColor Green
-    
-    return IsVolumeEncrypted
+# If Bitlocker is enabled and recovery key is found, exit and return the key!
+# If Bitlocker is enabled and recovey key is NOT found, add recovery key and return the key
+if ((IsVolumeEncrypted) -and (Get-RecoveryKey)) {
+
+    Write-Host "Bitlocker already enabled! Checking for recovery key....." -ForegroundColor Yellow
+    return Get-RecoveryKey
+
 }
-else {
-    Write-Host "Bitlocker not enabled." -ForegroundColor Red
-    
+elseif ((IsVolumeEncrypted) -and (!(Get-RecoveryKey))) {
+
+    Write-Host "Adding recovery key...."  -ForegroundColor Yellow  
+    Add-RecoveryKeyProtector
+
+    Write-Host "Recovery key added..." -ForegroundColor Green
+    return Get-RecoveryKey  
 }
+
 
 # TPM Logic if Bitlocker not enabled
 $TPMState = Get-TPMState
