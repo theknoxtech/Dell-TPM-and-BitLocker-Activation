@@ -153,8 +153,9 @@ function Install-VCRedist2022 {
     Set-Location $working_dir
 }
 
+# Returns current password value as a [Bool]
 function IsBIOSPasswordSet {
-    return (Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue
+    return [System.Convert]::ToBoolean((Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue)
 }
 
 # Generates a random passowrd from Dinopass to pass to Set-BiosAdminPassword
@@ -193,9 +194,9 @@ function Remove-BiosAdminPassword {
         [Parameter(Mandatory = $true)]
         [string]$RemovePassword
     )
-      
-    $current_password = Get-Content -Path $LTSvc\biospw.txt 
-    Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $current_password
+    
+    Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $CurrentPW
+
 
 }
 
@@ -287,17 +288,17 @@ if ((IsVolumeEncrypted) -and (Get-RecoveryKey)) {
     return Get-RecoveryKey
 
 }
-elseif ((IsVolumeEncrypted) -and (!(Get-RecoveryKey))) {
+elseif ((IsVolumeEncrypted) -and !(Get-RecoveryKey)) {
 
-    Write-Host "Adding recovery key...."  -ForegroundColor Yellow  
+    Write-Host "Adding recovery key"  -ForegroundColor Yellow  
     Add-RecoveryKeyProtector
 
-    Write-Host "Recovery key added..." -ForegroundColor Green
+    Write-Host "Recovery key added" -ForegroundColor Green
     return 
 }
 
 
-# TPM Logic if Bitlocker not enabled
+# If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
 if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
 {
@@ -306,19 +307,20 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
 
         Set-ERGBitlocker
         
-        Write-Host "Attempting to add recovery password...." -ForegroundColor Yellow
+        Write-Host "`tBitlocker has been ENABLED" -ForegroundColor Green
+
+        Write-Host "`tAttempting to add recovery password...." -ForegroundColor Yellow
 
         Add-RecoveryKeyProtector
 
-        Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Green
-
-        return
-       
+        Write-Host "`tRecovery key has been added" -ForegroundColor Green
+        
     }
     catch {
         throw "Bitlocker was not enabled."
     }
-    
+    Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black  
+    return
     
 }elseif (!($TPMstate.CheckTPMReady())) {
 
@@ -339,6 +341,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
         Import-Module DellBiosProvider -Verbose
+        
     }
     catch {
         throw "DellBiosProvider was not installed. Manual remediation required!"
@@ -353,15 +356,19 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
         Set-ERGBitlocker
         
-        Write-Host "Attempting to add recovery password...." -ForegroundColor Yellow
+        Write-Host "`tBitlocker has been ENABLED" -ForegroundColor Green
+
+        Write-Host "`tAttempting to add recovery password...." -ForegroundColor Yellow
 
         Add-RecoveryKeyProtector
+
+        Write-Host "`tRecovery key has been added" -ForegroundColor Green
     }
     catch {
-        throw "Bitlocker was not enabled."
+        throw "Bitlocker was not enabled. Manuel remediation required"
     }
 
-    Write-Host "Bitlocker enabled. REBOOT REQUIRED!"
+     Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black
     return 
 
 }
@@ -370,18 +377,25 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
+
     Write-Host "Setting BIOS password..." -ForegroundColor Yellow
+    try {
+       
+        Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile) 
+        $GeneratedPW = Get-Content -Path $LTSvc\Biospw.txt
+    }
+    catch {
 
-    Set-BiosAdminPassword -Password (GenerateRandomPassword -SaveToFile)
-
+        throw "Setting BIOS password FAILED. Manual remediation required"
+    }
+    Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green 
     Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green
-
 }
 else {
-
-    throw "BIOS password already set and must be cleared before proceeding. Manual remediation required!"
+    
+    throw "Unknown BIOS password detected. Manual remediation required."
 }
-
+ 
 # Enable TPM scurity in the BIOS
 
 $bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
@@ -405,7 +419,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
         throw "TPM not enabled. Manual remediation required!"
     }
 
-    Write-Host "TPM enabled. REBOOT REQUIRED!"
+    Write-Host "TPM enabled. REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
 
 }
 
@@ -418,7 +432,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")){
     Set-ERGBitlocker
 
 
-    Write-Host "`t\Bitlocker enabled. REBOOT REQUIRED!" -ForegroundColor Green
+    Write-Host "`t\Bitlocker enabled"
 
 }else{
 
@@ -438,7 +452,7 @@ if (IsVolumeEncrypted){
         throw "Recovery key protector was not added. Manual remediation required!"
     }
     
-    Write-Host "`t\Operation complete..." -ForegroundColor Yellow
+    Write-Host "`t\Bitlocker is enabled REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
 
     return Get-RecoveryKey
 
@@ -449,22 +463,23 @@ if (IsVolumeEncrypted){
 # Remove BIOS Password
 Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password." -ForegroundColor Yellow
 
+$CurrentPW = Get-Content -Path $LTSvc\biospw.txt
 if (IsVolumeEncrypted) {
     
     $biospw_validation = IsBIOSPasswordSet
     Write-Host "Attempting BIOS password removal..." -ForegroundColor Yellow
     try {
         
-        Remove-BiosAdminPassword -RemovePassword $current_password
+        Remove-BiosAdminPassword -RemovePassword $CurrentPW
     }
     catch {
         throw "BIOS password was not removed. Manual remediation required!"
     }
-    
-    Write-Host "Operation complete..." -ForegroundColor Yellow
-   
-    Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green
 
+    Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green
+}else {
+
+    throw "Bitlocker is NOT enabled. Manual remediation required!"
 }
 
 # Remove BiosPW.txt
