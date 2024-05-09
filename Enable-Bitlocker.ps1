@@ -44,8 +44,7 @@ function IsVolumeEncrypted {
  
     $volume_status = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
 
-    if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress")
-    {
+    if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress") {
         return $true
     }
 
@@ -60,17 +59,16 @@ function Get-SMBiosVersion {
 }
 
 # Returns true if BIOS version does not meet minium requirements. Returns false otherwise.
-function Get-SMBiosRequiresUpgrade
-{
+function Get-SMBiosRequiresUpgrade {
     Param(
-    [float]$MinimumVersion = 2.4
-  )
+        [float]$MinimumVersion = 2.4
+    )
   
-  if ((Get-SMBiosVersion) -lt $MinimumVersion){
-    return $true
-  }
+    if ((Get-SMBiosVersion) -lt $MinimumVersion) {
+        return $true
+    }
   
-  return $false
+    return $false
 }
 
 # Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
@@ -84,8 +82,7 @@ function Get-TPMState {
     $TPMState | Add-Member NoteProperty "IsEnabled" $TPM.TpmEnabled
 
     $TPMState | Add-Member ScriptMethod "CheckTPMReady" {
-        if ($this.IsPresent -and $this.IsReady -and $this.IsEnabled)
-        {
+        if ($this.IsPresent -and $this.IsReady -and $this.IsEnabled) {
             return $true
         }
 
@@ -211,7 +208,7 @@ function Set-ERGBitlocker {
         EncryptionMethod = "XtsAes128"
         TpmProtector     = $true
         UsedSpaceOnly    = $true
-        SkiphardwareTest  = $true
+        SkiphardwareTest = $true
 
     }
 
@@ -241,7 +238,7 @@ function Add-RecoveryKeyProtector {
 function Get-RecoveryKey {
 
     $key = (Get-BitLockerVolume -MountPoint "C:").KeyProtector.recoverypassword
-        return $key
+    return $key
     
 }
 
@@ -252,7 +249,7 @@ function IsTPMSecurityEnabled {
 }
 
 # Check if TPM is Activated in the BIOS - Returns Enabled or Disabled
-function IsTPMActivated{
+function IsTPMActivated {
 
     return (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
 }
@@ -262,7 +259,7 @@ function IsTPMActivated{
 ########################
 
 # Check Execution Policy
-if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")){
+if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")) {
 
     try {
         Set-ExecutionPolicy Bypass
@@ -273,11 +270,10 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
 }
 
 # Check BIOS Version
-    # Upgrade BIOS if not up to date
-    if (Get-SMBiosRequiresUpgrade)
-    {
-        throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
-    }
+# Upgrade BIOS if not up to date
+if (Get-SMBiosRequiresUpgrade) {
+    throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
+}
 
 # Bitlocker Validation
 # If Bitlocker is enabled and recovery key is found, exit and return the key!
@@ -300,8 +296,7 @@ elseif ((IsVolumeEncrypted) -and !(Get-RecoveryKey)) {
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
-if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
-{
+if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
     Write-Host "TPM is ready! Attempting to enable Bitlocker......" -ForegroundColor Green
     try {
 
@@ -322,7 +317,8 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
     Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black  
     return
     
-}elseif (!($TPMstate.CheckTPMReady())) {
+}
+elseif (!($TPMstate.CheckTPMReady())) {
 
     Write-Host "TPM check has failed! Attempting to remeditate..." -ForegroundColor Yellow
 
@@ -333,7 +329,7 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted))
 VCChecks
 
 # Install DellBiosProvider
-if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
+if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
     Write-Host "Attempting to install DellBiosProvider...." -ForegroundColor Yellow
 
@@ -349,7 +345,8 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
 
     Write-Host "DellBiosProvider installed successfully!" -ForegroundColor Green
 
-}elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
+}
+elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
 
     Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
     try {
@@ -368,7 +365,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())){
         throw "Bitlocker was not enabled. Manuel remediation required"
     }
 
-     Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black
+    Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black
     return 
 
 }
@@ -388,8 +385,8 @@ if (!(IsBIOSPasswordSet)) {
 
         throw "Setting BIOS password FAILED. Manual remediation required"
     }
-    Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green 
-    Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green
+    Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green -BackgroundColor Black
+    Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green -BackgroundColor Black
 }
 else {
     
@@ -399,18 +396,15 @@ else {
 # Enable TPM scurity in the BIOS
 
 $bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
-if (IsTPMSecurityEnabled)
-{
-    Write-Host "TPM security is enabled in the BIOS." -ForegroundColor Green
+if (IsTPMSecurityEnabled) {
+    Write-Host "TPM security is enabled in the BIOS." -ForegroundColor Green -BackgroundColor Black
 }
-else 
-{
+else {
     Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $bios_pw
 }
 
 # Enable TPM Activation in the BIOS
-if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
-{
+if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled")) {
 
     try {
         Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $bios_pw
@@ -423,48 +417,9 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled"))
 
 }
 
-# REBOOT REQUIRED HERE
-
-# Enable Bitlocker 
-if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")){
-    Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
-
-    Set-ERGBitlocker
-
-
-    Write-Host "`t\Bitlocker enabled"
-
-}else{
-
-    throw "Bitlocker not enabled. Manual remediation required!"
-}
-
-
-# Add Recovery Key Protector 
-if (IsVolumeEncrypted){
-
-    Write-Host "Attempting to add recovery key protector..." -ForegroundColor Yellow
-
-    try {
-        Add-RecoveryKeyProtector
-    }
-    catch {
-        throw "Recovery key protector was not added. Manual remediation required!"
-    }
-    
-    Write-Host "`t\Bitlocker is enabled REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
-
-    return Get-RecoveryKey
-
-}
-
-# REBOOT REQUIRED
-
-# Remove BIOS Password
-Write-Host "Bitlocker is now enabled. Attempting removal of BIOS password." -ForegroundColor Yellow
-
+# Check if TPM is enabled and activated in the BIOS then remove password
 $CurrentPW = Get-Content -Path $LTSvc\biospw.txt
-if (IsVolumeEncrypted) {
+if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")) {
     
     $biospw_validation = IsBIOSPasswordSet
     Write-Host "Attempting BIOS password removal..." -ForegroundColor Yellow
@@ -476,23 +431,29 @@ if (IsVolumeEncrypted) {
         throw "BIOS password was not removed. Manual remediation required!"
     }
 
-    Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green
-}else {
+    Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green -BackgroundColor Black
+}
+else {
 
     throw "Bitlocker is NOT enabled. Manual remediation required!"
 }
 
 # Remove BiosPW.txt
-if (IsBIOSPasswordSet){
+if (IsBIOSPasswordSet) {
     Write-Host "Attempting to delete BiosPW.txt" -ForegroundColor Yellow
 
     throw "Remove the BIOS password before deleting the file. Manual remediation required!"
 
-}else {
+}
+else {
     
     Remove-Item -Path $LTSvc\Biospw.txt -Force
     
     Write-Host "Biospw.txt has been successfully removed!" -ForegroundColor Green
 }
 
-Stop-Transcript
+Write-Host "TPM is now ready. Reboot the system and rerun the script to enable Bitlocker" -ForegroundColor Red -BackgroundColor Black
+
+# REBOOT REQUIRED HERE
+
+Stop-Transcript 
