@@ -51,6 +51,14 @@ function IsVolumeEncrypted {
     return $false
 }
 
+#Gets the current encryption state of the volume and returns it.
+function Get-EncryptionState {
+
+    $encryption_state = (Get-BitLockerVolume -MountPoint "C:").VolumeStatus
+    
+    return $encryption_state
+}
+
 # BIOS verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -197,6 +205,33 @@ function Remove-BiosAdminPassword {
 
 }
 
+# Bitlocker state object
+# IsProtectionOn returns TRUE if volume is fully encrypted, keyprotector is present, and protection status is "On"
+# IsProtectionOn returns FALSE if volume is fully encrypted, keyprotector is present, and protection status is "Off"
+function Get-BitlockerState {
+
+    $ERGBitlocker = Get-BitLockerVolume -MountPoint "C:"
+
+    $BitlockerState = New-Object psobject
+    $BitlockerState | Add-Member NoteProperty "VolumeStatus" $ERGBitlocker.VolumeStatus
+    $BitlockerState | Add-Member NoteProperty "ProtectionStatus" $ERGBitlocker.ProtectionStatus
+    $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
+
+    $BitlockerState | Add-Member ScriptMethod "IsProtectionOn" {
+        if ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "On") {
+            return $true
+        }
+        elseif ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "Off") {
+            return $false
+        }
+
+        
+    }
+
+
+    return $BitlockerState
+}
+
 # If volume is unencrypted and TPM is ready, then enable Bitlocker
 function Set-ERGBitlocker {
 
@@ -242,6 +277,7 @@ function Get-RecoveryKey {
     
 }
 
+
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
         
@@ -257,6 +293,8 @@ function IsTPMActivated {
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
+
+
 
 # Check Execution Policy
 if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")) {
@@ -274,6 +312,22 @@ if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "
 if (Get-SMBiosRequiresUpgrade) {
     throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
 }
+
+# New deployment Bitlocker check
+# This is to resolve the issue when Immybot isn't able to enable Bitlocker completely
+$bitlocker_state = Get-BitlockerState
+
+if (!($bitlocker_state.IsProtectionOn())) {
+    try {
+        Resume-BitLocker -MountPoint C:
+    }
+    catch {
+        Write-Host "Failed to enable Bitlocker"
+    }
+    return $bitlocker_state
+}
+
+
 
 # Bitlocker Validation
 # If Bitlocker is enabled and recovery key is found, exit and return the key!
