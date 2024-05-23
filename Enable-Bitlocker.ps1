@@ -226,20 +226,6 @@ function Get-BitlockerState {
         }   
     }
 
-    # $BitlockerState | Add-Member ScriptMethod "IsRecoveryPasswordSet" {
-
-    #     if (($this.KeyProtector.RecoveryPassword)) {
-    #         return $true
-    #     }
-    #     else {
-    #         return $false
-    #     }
-
-    #}
-
-
-
-
     return $BitlockerState
 }
 
