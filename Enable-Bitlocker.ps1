@@ -274,6 +274,12 @@ function Get-RecoveryKey {
     
 }
 
+#TODO Develop function for checking reboot status
+function IsRebootRequired {
+
+    (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+}
+
 
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
@@ -324,7 +330,7 @@ if ($bitlocker_status.IsBitlockerEnabled()){
         Resume-BitLocker -MountPoint C:
     }
     catch {
-        throw "Protection was NOT turned. Manual remediation required!"
+        throw "Protection was NOT turned on. Manual remediation required!"
     }
     return Get-BitlockerState
     
