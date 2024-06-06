@@ -226,6 +226,18 @@ function Get-BitlockerState {
         }   
     }
 
+    # $BitlockerState | Add-Member ScriptMethod "IsRebootRequired" {
+    #     $reboot_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+
+    #     if ($reboot_status -gt 0) {
+    #         return $true
+    #     }
+    #     else {
+    #         return $false
+    #     }
+
+    # }
+
     return $BitlockerState
 }
 
@@ -274,10 +286,17 @@ function Get-RecoveryKey {
     
 }
 
-#TODO Develop function for checking reboot status
+# Checks for a reboot that would be displayed with manage-bde -status 
 function IsRebootRequired {
 
-    (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+    $reboot_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+
+    if ($reboot_status -gt 0){
+        return $true
+    }else{
+        return $false
+    }
+
 }
 
 
@@ -316,15 +335,20 @@ if (Get-SMBiosRequiresUpgrade) {
     throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
 }
 
-# Initial check for Bitlocker. Checks for VolumeStatus, KeyProtectors, and ProtectionStatus
+
+# Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
 $bitlocker_status = Get-BitlockerState
 
-if ($bitlocker_status.IsBitlockerEnabled()){
+if (($bitlocker_status.IsBitlockerEnabled()) -and (IsRebootRequired) ){
+
+    throw "A required reboot has been detected"
+
+}elseif ($bitlocker_status.IsBitlockerEnabled()){
 
     Write-Host "Bitlocker is enabled and protection is ACTIVE!" -ForegroundColor Green
     return $bitlocker_status
 
-}elseif (!($bitlocker_status.IsBitlockerEnabled())) {
+}elseif (!($bitlocker_status.IsBitlockerEnabled()) -and !(IsRebootRequired)) {
 
     try {
         Resume-BitLocker -MountPoint C:
