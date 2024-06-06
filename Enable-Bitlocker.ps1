@@ -339,9 +339,9 @@ if (Get-SMBiosRequiresUpgrade) {
 # Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
 $bitlocker_status = Get-BitlockerState
 
-if (($bitlocker_status.IsBitlockerEnabled()) -and (IsRebootRequired) ){
+if (IsRebootRequired) {
 
-    throw "A required reboot has been detected"
+    throw "Reboot required to enable protection"
 
 }elseif ($bitlocker_status.IsBitlockerEnabled()){
 
