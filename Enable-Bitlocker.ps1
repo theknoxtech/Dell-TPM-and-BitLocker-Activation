@@ -339,26 +339,27 @@ if (Get-SMBiosRequiresUpgrade) {
 # Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
 $bitlocker_status = Get-BitlockerState
 
-if (IsRebootRequired) {
+if (!(IsRebootRequired)){
 
-    throw "Reboot required to enable protection"
+    if ($bitlocker_status.IsBitlockerEnabled()){
 
-}elseif ($bitlocker_status.IsBitlockerEnabled()){
+        Write-Host "Bitlocker is ENABLED and protection is ACTIVE" -ForegroundColor Green
 
-    Write-Host "Bitlocker is enabled and protection is ACTIVE!" -ForegroundColor Green
-    return $bitlocker_status
+    }elseif (!($bitlocker_status.IsBitlockerEnabled)) {
 
-}elseif (!($bitlocker_status.IsBitlockerEnabled()) -and !(IsRebootRequired)) {
-
-    try {
-        Resume-BitLocker -MountPoint C:
+        try {
+            Resume-BitLocker -MountPoint C:
+        }
+        catch {
+            throw "Protection NOT enabled. Manual remediation required"
+        }
     }
-    catch {
-        throw "Protection was NOT turned on. Manual remediation required!"
-    }
-    return Get-BitlockerState
-    
+
+}else{
+
+    throw "Bitlocker changes are pending reboot. Reboot system and try again"
 }
+
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
