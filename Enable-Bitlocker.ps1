@@ -345,7 +345,7 @@ if (!(IsRebootRequired)){
 
         Write-Host "Bitlocker is ENABLED and protection is ACTIVE" -ForegroundColor Green
 
-    }elseif (!($bitlocker_status.IsBitlockerEnabled)) {
+    }elseif (!($bitlocker_status.IsBitlockerEnabled())) {
 
         try {
             Resume-BitLocker -MountPoint C:
