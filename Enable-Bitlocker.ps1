@@ -226,18 +226,6 @@ function Get-BitlockerState {
         }   
     }
 
-    # $BitlockerState | Add-Member ScriptMethod "IsRebootRequired" {
-    #     $reboot_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
-
-    #     if ($reboot_status -gt 0) {
-    #         return $true
-    #     }
-    #     else {
-    #         return $false
-    #     }
-
-    # }
-
     return $BitlockerState
 }
 
@@ -354,7 +342,9 @@ if (!(IsRebootRequired)){
         catch {
             throw "Protection NOT enabled. Manual remediation required"
         }
+
     }
+    return
 
 }else{
 
