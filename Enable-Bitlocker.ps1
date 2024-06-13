@@ -344,11 +344,13 @@ if (!(IsRebootRequired)){
         }
 
     }
+    Stop-Transcript
     return
 
 }else{
 
     throw "Bitlocker changes are pending reboot. Reboot system and try again"
+    Stop-Transcript
 }
 
 
@@ -374,9 +376,9 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
     }
     Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black  
     return
+    Stop-Transcript
     
-}
-elseif (!($TPMstate.CheckTPMReady())) {
+}elseif (!($TPMstate.CheckTPMReady())) {
 
     Write-Host "TPM check has failed! Attempting to remeditate..." -ForegroundColor Yellow
 
@@ -399,12 +401,12 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
     }
     catch {
         throw "DellBiosProvider was not installed. Manual remediation required!"
+        Stop-Transcript
     }
 
     Write-Host "DellBiosProvider installed successfully!" -ForegroundColor Green
 
-}
-elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
+}elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
 
     Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
     try {
@@ -421,10 +423,12 @@ elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
     }
     catch {
         throw "Bitlocker was not enabled. Manuel remediation required"
+        Stop-Transcript
     }
 
     Write-Host "Bitlocker enabled. REBOOT REQUIRED" -ForegroundColor Red -BackgroundColor Black
     return 
+    Stop-Transcript
 
 }
 
@@ -442,6 +446,7 @@ if (!(IsBIOSPasswordSet)) {
     catch {
 
         throw "Setting BIOS password FAILED. Manual remediation required"
+        Stop-Transcript
     }
     Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green -BackgroundColor Black
     Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green -BackgroundColor Black
@@ -449,6 +454,7 @@ if (!(IsBIOSPasswordSet)) {
 else {
     
     throw "Unknown BIOS password detected. Manual remediation required."
+    Stop-Transcript
 }
  
 # Enable TPM scurity in the BIOS
@@ -469,9 +475,11 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled")) {
     }
     catch {
         throw "TPM not enabled. Manual remediation required!"
+        Stop-Transcript
     }
 
     Write-Host "TPM enabled. REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
+    Stop-Transcript
 
 }
 
@@ -487,6 +495,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")) {
     }
     catch {
         throw "BIOS password was not removed. Manual remediation required!"
+        Stop-Transcript
     }
 
     Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green -BackgroundColor Black
@@ -494,6 +503,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")) {
 else {
 
     throw "Bitlocker is NOT enabled. Manual remediation required!"
+    Stop-Transcript
 }
 
 # Remove BiosPW.txt
@@ -501,6 +511,7 @@ if (IsBIOSPasswordSet) {
     Write-Host "Attempting to delete BiosPW.txt" -ForegroundColor Yellow
 
     throw "Remove the BIOS password before deleting the file. Manual remediation required!"
+    Stop-Transcript
 
 }
 else {
