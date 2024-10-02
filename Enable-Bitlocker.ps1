@@ -325,7 +325,7 @@ if (Get-SMBiosRequiresUpgrade) {
 
 
 # Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
-# Lines 341-362 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
+# Lines 328-354 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
 $bitlocker_status = Get-BitlockerState
 
 if (!(IsRebootRequired)){
