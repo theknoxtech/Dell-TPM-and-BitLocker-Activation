@@ -216,12 +216,12 @@ function Get-BitlockerState {
     $BitlockerState | Add-Member NoteProperty "VolumeStatus" $ERGBitlocker.VolumeStatus
     $BitlockerState | Add-Member NoteProperty "ProtectionStatus" $ERGBitlocker.ProtectionStatus
     $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
-
+    
     $BitlockerState | Add-Member ScriptMethod "IsBitlockerEnabled" {
-        if ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "On") {
+        if (($this.VolumeStatus -like "FullyEncrypted") -and ($this.KeyProtector.RecoveryPassword) -and ($this.ProtectionStatus -like "On")) {
             return $true
         }
-        elseif ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "Off") {
+        elseif (($this.VolumeStatus -like "FullyEncrypted") -and ($this.KeyProtector.RecoveryPassword) -and ($this.ProtectionStatus -like "Off")) {
             return $false
         }   
     }
@@ -327,6 +327,7 @@ if (Get-SMBiosRequiresUpgrade) {
 # Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
 # Lines 328-354 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
 $bitlocker_status = Get-BitlockerState
+
 
 if (!(IsRebootRequired)){
 
