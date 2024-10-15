@@ -51,14 +51,6 @@ function IsVolumeEncrypted {
     return $false
 }
 
-# Gets the current encryption state of the volume and returns it.
-function Get-EncryptionState {
-
-    $encryption_state = (Get-BitLockerVolume -MountPoint "C:").VolumeStatus
-    
-    return $encryption_state
-}
-
 # BIOS verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -218,12 +210,16 @@ function Get-BitlockerState {
     $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
 
     $BitlockerState | Add-Member ScriptMethod "IsBitlockerEnabled" {
+
+    
+        <#
         if ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "On") {
             return $true
         }
         elseif ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "Off") {
             return $false
-        }   
+        }
+        #>   
     }
 
     return $BitlockerState
@@ -285,6 +281,22 @@ function IsRebootRequired {
     }
 }
 
+# Checks for Encryption Status using Get-CIMInstance
+# 0=FullyDecrypted 1=FullyEncrypted 2=EncryptionInProgress
+function Get-ConversionState {
+    $conversion_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetConversionStatus").conversionstatus
+
+    return $conversion_status
+}
+
+# Checks Protection Status 
+# 0 = UNPROTECTED 1 = PROTECTED 2 = UNKNOWN
+function IsProtected {
+    $protection_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetProtectionStatus").protectionstatus
+
+    return $protection_status
+}
+
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
         
@@ -322,6 +334,20 @@ if (Get-SMBiosRequiresUpgrade) {
 # Lines 336-348 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
 $bitlocker_status = Get-BitlockerState
 
+# TODO Check for Reboot for Continuing
+if (IsRebootRequired){
+    throw "Please Reboot Before Proceeding"
+}
+
+
+
+
+
+
+
+
+
+<#
 if (!(IsRebootRequired)){
 
     if ($bitlocker_status.IsBitlockerEnabled()){
@@ -346,6 +372,7 @@ if (!(IsRebootRequired)){
     throw "Bitlocker changes are pending reboot. Reboot and try again!"
     Stop-Transcript
 }
+#>
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
