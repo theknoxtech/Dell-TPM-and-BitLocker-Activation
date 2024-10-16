@@ -203,18 +203,13 @@ function Remove-BiosAdminPassword {
 
 # TODO Review function Get-Bitlocker state 
 # Bitlocker state object
-# IsBitlockerEnabled returns TRUE if volume is fully encrypted, keyprotector is present, and protection status is "On"
-# IsBitlockerEnabled returns FALSE if volume is fully encrypted, keyprotector is present, and protection status is "Off"
 function Get-BitlockerState {
-
     $ERGBitlocker = Get-BitLockerVolume -MountPoint "C:"
 
     $BitlockerState = New-Object psobject
     $BitlockerState | Add-Member NoteProperty "VolumeStatus" $ERGBitlocker.VolumeStatus
     $BitlockerState | Add-Member NoteProperty "ProtectionStatus" $ERGBitlocker.ProtectionStatus
     $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
-
-
     $BitlockerState | Add-Member ScriptMethod "IsTPMKeyPresent" {
         $tpm_key = ($this.KeyProtector).KeyProtectorType
         
@@ -232,6 +227,25 @@ function Get-BitlockerState {
         }else {
             return $false
         }
+     }
+     $BitlockerState | Add-Member ScriptMethod "IsRebootRequired" {
+        $reboot_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+
+        if ($reboot_status -gt 0){
+            return $true
+        }else{
+            return $false
+        }
+     }
+     $BitlockerState | Add-Member ScriptMethod "IsVolumeEncrypted" {
+        $encrypt_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetConversionStatus").conversionstatus
+
+        return $encrypt_status
+     }
+     $BitlockerState | Add-Member ScriptMethod "IsProtected" {
+        $protection_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetProtectionStatus").protectionstatus
+
+        return $protection_status
      }
 
     return $BitlockerState
@@ -283,7 +297,7 @@ function Get-RecoveryKey {
 }
 
 # Checks for a reboot that would be displayed with manage-bde -status 
-function IsRebootRequired {
+<# function IsRebootRequired {
     $reboot_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
 
     if ($reboot_status -gt 0){
@@ -291,23 +305,23 @@ function IsRebootRequired {
     }else{
         return $false
     }
-}
+} #>
 
 # Checks for Encryption Status using Get-CIMInstance
 # 0=FullyDecrypted 1=FullyEncrypted 2=EncryptionInProgress
-function Get-EncryptState {
+<# function Get-EncryptState {
     $encrypt_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetConversionStatus").conversionstatus
 
     return $encrypt_status
-}
+} #>
 
 # Checks Protection Status 
-# 0 = UNPROTECTED 1 = PROTECTED 2 = UNKNOWN
-function IsProtected {
+# 0=UNPROTECTED 1=PROTECTED 2=UNKNOWN
+<# function IsProtected {
     $protection_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetProtectionStatus").protectionstatus
 
     return $protection_status
-}
+} #>
 
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
@@ -346,11 +360,15 @@ if (Get-SMBiosRequiresUpgrade) {
 # Lines 336-348 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
 $bitlocker_status = Get-BitlockerState
 
-# TODO Check for Reboot for Continuing
-if (IsRebootRequired){
-
-    throw "Please Reboot Before Proceeding"
+# TODO 
+# Check for Reboot for Continuing
+switch ($bitlocker_status.IsRebootRequired()) {
+    {$_ -ge 0} { throw "REBOOT REQUIRED"  } 
 }
+
+#FullyDecrypted=0, FullyEncrypted=1
+# Check if Encrypted, has key protectors, and protection status
+switch ( )
 
 
 
