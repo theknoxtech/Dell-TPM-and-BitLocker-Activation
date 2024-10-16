@@ -33,8 +33,9 @@ None.
 
 #>
 
-# Global Storage Path
+# Global Variables
 $global:LTSvc = "C:\Windows\LTSvc\packages"
+$global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 
 # Start Transcript
 Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
@@ -71,6 +72,9 @@ function Get-SMBiosRequiresUpgrade {
     return $false
 }
 
+##
+# TODO Review Get-TPMState Function 
+##
 # Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
 function Get-TPMState {
 
@@ -197,6 +201,7 @@ function Remove-BiosAdminPassword {
 
 }
 
+# TODO Review function Get-Bitlocker state 
 # Bitlocker state object
 # IsBitlockerEnabled returns TRUE if volume is fully encrypted, keyprotector is present, and protection status is "On"
 # IsBitlockerEnabled returns FALSE if volume is fully encrypted, keyprotector is present, and protection status is "Off"
@@ -209,18 +214,25 @@ function Get-BitlockerState {
     $BitlockerState | Add-Member NoteProperty "ProtectionStatus" $ERGBitlocker.ProtectionStatus
     $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
 
-    $BitlockerState | Add-Member ScriptMethod "IsBitlockerEnabled" {
 
-    
-        <#
-        if ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "On") {
+    $BitlockerState | Add-Member ScriptMethod "IsTPMKeyPresent" {
+        $tpm_key = ($this.KeyProtector).KeyProtectorType
+        
+        if ($tpm_key -contains "Tpm"){
             return $true
-        }
-        elseif ($this.VolumeStatus -like "FullyEncrypted" -and $this.KeyProtector.RecoveryPassword -and $this.ProtectionStatus -like "Off") {
+        }else {
             return $false
         }
-        #>   
-    }
+     }
+     $BitlockerState | Add-Member ScriptMethod "IsRecoveryPassword" {
+        $recovery_password = ($this.KeyProtector).KeyProtectorType
+
+        if ($recovery_password -contains "RecoveryPassword"){
+            return $true
+        }else {
+            return $false
+        }
+     }
 
     return $BitlockerState
 }
@@ -272,7 +284,7 @@ function Get-RecoveryKey {
 
 # Checks for a reboot that would be displayed with manage-bde -status 
 function IsRebootRequired {
-    $reboot_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
+    $reboot_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetSuspendCount").SuspendCount
 
     if ($reboot_status -gt 0){
         return $true
@@ -283,16 +295,16 @@ function IsRebootRequired {
 
 # Checks for Encryption Status using Get-CIMInstance
 # 0=FullyDecrypted 1=FullyEncrypted 2=EncryptionInProgress
-function Get-ConversionState {
-    $conversion_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetConversionStatus").conversionstatus
+function Get-EncryptState {
+    $encrypt_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetConversionStatus").conversionstatus
 
-    return $conversion_status
+    return $encrypt_status
 }
 
 # Checks Protection Status 
 # 0 = UNPROTECTED 1 = PROTECTED 2 = UNKNOWN
 function IsProtected {
-    $protection_status = (Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'" | Invoke-CimMethod -MethodName "GetProtectionStatus").protectionstatus
+    $protection_status = ($EncryptVol | Invoke-CimMethod -MethodName "GetProtectionStatus").protectionstatus
 
     return $protection_status
 }
@@ -336,6 +348,7 @@ $bitlocker_status = Get-BitlockerState
 
 # TODO Check for Reboot for Continuing
 if (IsRebootRequired){
+
     throw "Please Reboot Before Proceeding"
 }
 
