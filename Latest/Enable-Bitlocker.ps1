@@ -367,17 +367,19 @@ if (Get-SMBiosRequiresUpgrade) {
 $bitlocker_status = Get-BitlockerState
 
 # TODO Current development starting here
-# Check for Reboot for Continuing
+# TODO Add transcipt stops where needed
+# 
 switch ($bitlocker_status.IsRebootRequired()) {
 
-    {$_ -ge 0} { throw "REBOOT REQUIRED"  }
+    {$_ -gt 0} { throw "REBOOT REQUIRED"  }
     {$_ -eq 0} {
         Write-Host "No Reboots Pending... Continuing checks" -ForegroundColor Green
 
         switch ($bitlocker_status.IsVolumeEncrypted()) {
 
-            {$_ -eq 0} {
-                Write-Host "Drive NOT Encrypted. Continuing to enable Bitlocker..." -ForegroundColor Yellow break}
+            {$_ -eq 0} {   
+                Write-Host "Drive NOT Encrypted. Continuing to enable Bitlocker..." -ForegroundColor Yellow break
+            }
             {$_ -eq 1} { 
                 Write-Host "Drive is FullyEncrypted. Checking Key Protectors." -ForegroundColor Yellow
 
@@ -393,7 +395,7 @@ switch ($bitlocker_status.IsRebootRequired()) {
                                     {$_ -eq 1} {
                                         Write-Host "Bitlocker fully ENABLED. No action needed!" -ForegroundColor Green
                                         # TODO Script termination needed here
-
+                                        break 
                                     }
                                     {$_ -eq 0} {
                                         # TODO Actions if Protection Status is OFF
@@ -436,17 +438,9 @@ switch ($bitlocker_status.IsRebootRequired()) {
     } 
 }
 
+
 #FullyDecrypted=0, FullyEncrypted=1
 # Check if Encrypted, has key protectors, and protection status
-
-
-
-
-
-
-
-
-
 
 <#
 if (!(IsRebootRequired)){
@@ -474,6 +468,9 @@ if (!(IsRebootRequired)){
     Stop-Transcript
 }
 #>
+
+
+
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
