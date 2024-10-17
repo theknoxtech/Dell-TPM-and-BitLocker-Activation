@@ -288,6 +288,12 @@ function Add-RecoveryKeyProtector {
     }
 }
 
+# TODO Refactor to use Get-BitlockerState with encryption check
+function Add-TPMKeyProtector {
+
+    Add-BitLockerKeyProtector -MountPoint C: -TpmProtector
+}
+
 # Gets the Bitlocker recovery key
 function Get-RecoveryKey {
 
@@ -360,15 +366,74 @@ if (Get-SMBiosRequiresUpgrade) {
 # Lines 336-348 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
 $bitlocker_status = Get-BitlockerState
 
-# TODO 
+# TODO Current development starting here
 # Check for Reboot for Continuing
 switch ($bitlocker_status.IsRebootRequired()) {
-    {$_ -ge 0} { throw "REBOOT REQUIRED"  } 
+
+    {$_ -ge 0} { throw "REBOOT REQUIRED"  }
+    {$_ -eq 0} {
+        Write-Host "No Reboots Pending... Continuing checks" -ForegroundColor Green
+
+        switch ($bitlocker_status.IsVolumeEncrypted()) {
+
+            {$_ -eq 0} {
+                Write-Host "Drive NOT Encrypted. Continuing to enable Bitlocker..." -ForegroundColor Yellow break}
+            {$_ -eq 1} { 
+                Write-Host "Drive is FullyEncrypted. Checking Key Protectors." -ForegroundColor Yellow
+
+                switch ($bitlocker_status.IsTPMKeyPresent()) {
+                    {$_ -eq $true} {  
+                        Write-Host "TPM Protector found...Continuing checks" -ForegroundColor Yellow
+
+                        switch ($bitlocker_status.IsRecoveryPassword()) {
+                            {$_ -eq $true} {  
+                                Write-Host "Recovery Password found...Continue checks" -ForegroundColor Yellow
+
+                                switch ($bitlocker_status.IsProtected()) {
+                                    {$_ -eq 1} {
+                                        Write-Host "Bitlocker fully ENABLED. No action needed!" -ForegroundColor Green
+                                        # TODO Script termination needed here
+                                        
+                                    }
+                                    {$_ -eq 0} {
+                                        # TODO Actions if Protection Status is OFF
+                                        try {
+                                            Resume-Bitlocker -MountPoint C:
+                                        }
+                                        catch {
+                                            throw "Protection NOT enabled... Manual remediation required"
+                                        }
+                                    }
+                                    
+                                }
+                            }
+                            {$_ -eq $false} {  
+                                # TODO Actions for Recovery Password not found
+                                try {
+                                    Add-RecoveryKeyProtector
+                                }
+                                catch {
+                                    throw "Recovery Password NOT created... Manual remediation required!"
+                                }
+                            }
+                            
+                        }
+                    }
+                    {$_ -eq $false} { 
+                        # TODO Actions for TPM Protector not found
+                        Add-TPMKeyProtector
+                    }
+                    
+                }
+            }
+            
+        }
+    } 
 }
 
 #FullyDecrypted=0, FullyEncrypted=1
 # Check if Encrypted, has key protectors, and protection status
-switch ( )
+
 
 
 
