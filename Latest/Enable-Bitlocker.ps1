@@ -393,7 +393,7 @@ switch ($bitlocker_status.IsRebootRequired()) {
                                     {$_ -eq 1} {
                                         Write-Host "Bitlocker fully ENABLED. No action needed!" -ForegroundColor Green
                                         # TODO Script termination needed here
-                                        
+
                                     }
                                     {$_ -eq 0} {
                                         # TODO Actions if Protection Status is OFF
@@ -421,7 +421,12 @@ switch ($bitlocker_status.IsRebootRequired()) {
                     }
                     {$_ -eq $false} { 
                         # TODO Actions for TPM Protector not found
-                        Add-TPMKeyProtector
+                        try {
+                            Add-TPMKeyProtector
+                        }
+                        catch {
+                            throw "TPM Protector NOT created... Manual Remediation required!"
+                        }
                     }
                     
                 }
