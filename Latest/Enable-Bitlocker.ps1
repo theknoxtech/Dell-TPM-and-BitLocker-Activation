@@ -294,6 +294,7 @@ function Remove-BiosAdminPassword {
 }
 
 # If Bitlocker is enabled, then add recovery password protector
+# TODO Add params to add either or RecoveryPassword or TPM
 function Add-RecoveryKeyProtector {
     
     if (IsVolumeEncrypted) {
@@ -467,6 +468,7 @@ if (!(IsRebootRequired)){
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
+# TODO update to use Get-BitlockerState
 if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
     Write-Host "TPM is ready! Attempting to enable Bitlocker..." -ForegroundColor Green
     try {
@@ -633,7 +635,7 @@ else {
     Write-Host "Biospw.txt has been successfully removed!" -ForegroundColor Green
 }
 
-Write-Host "TPM enabled. Reboot the system and rerun the script to enable Bitlocker." -ForegroundColor Red -BackgroundColor Black
+Write-Host "REBOOT REQUIRED: Rerun after script reboot to finish Bitlocker setup" -ForegroundColor Red -BackgroundColor Black
 
 # REBOOT REQUIRED HERE
 
