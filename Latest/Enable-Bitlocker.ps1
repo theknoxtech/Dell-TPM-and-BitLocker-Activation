@@ -37,6 +37,7 @@ None.
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 
+
 # Start Transcript
 Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
 
@@ -156,10 +157,10 @@ function Get-BitlockerState {
     return $BitlockerState
 }
 
-# Query Bitlocker Set-BitlockerState
+# Query Bitlocker and Set-BitlockerState
 function Set-BitlockerState {
-# TODO Add variable for Get-BitlockerState
     $tpm = Get-TPMState
+    $encrypt_state = Get-BitlockerState
 
     $bitlocker_options = @{
 
@@ -170,8 +171,8 @@ function Set-BitlockerState {
         SkiphardwareTest = $true
 
     }
-# TODO Change IsVolumeEncrypted to use Get-BitlockerState.IsVolumeEncrypted()
-    if ((!(IsVolumeEncrypted)) -and $tpm.CheckTPMReady()) {
+
+    if ((!($encrypt_state.IsVolumeEncrypted())) -and $tpm.CheckTPMReady()) {
 
         try {
             
@@ -189,7 +190,7 @@ function Set-BitlockerState {
 
 
 # Check if Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
-function VCChecks {
+function Install-Redistributables {
     # Visual C++ Redistributable logic
     # Check for Visual C++ Redistributable packages
     Write-Host "Loading installed applications..." -ForegroundColor Yellow
@@ -239,7 +240,7 @@ function Install-VCRedist2010 {
 function Install-VCRedist2022 {
     $working_dir = $PWD
 
-    Start-BitsTransfer -Source "https://aka.ms/vs/17/release/vc_redist.x64.exe" -Destination "$($LTSvc)\vc_redist.x64.exe"
+    [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
     Set-Location $LTSvc
     .\vc_redist.x64.exe /q | Wait-Process
 
@@ -293,27 +294,19 @@ function Remove-BiosAdminPassword {
 
 }
 
-# If Bitlocker is enabled, then add recovery password protector
-# TODO Add params to add either or RecoveryPassword or TPM
-function Add-RecoveryKeyProtector {
-    
-    if (IsVolumeEncrypted) {
+# Add either a recovery password or TPM key protector
+function Add-KeyProtector {
+    param(
+        [switch]$RecoveryPassword,
+        [switch]$TPMProtector
+    )
+
+    if ($RecoveryPassword) {
         Add-BitLockerKeyProtector -MountPoint "C:" -RecoveryPasswordProtector
+    }elseif ($TPMProtector) {
+        Add-BitLockerKeyProtector -MountPoint "C:" -TpmProtector
     }
-}
 
-# TODO Refactor to use Get-BitlockerState with encryption check
-function Add-TPMKeyProtector {
-
-    Add-BitLockerKeyProtector -MountPoint C: -TpmProtector
-}
-
-# Gets the Bitlocker recovery key
-function Get-RecoveryKey {
-
-    $key = (Get-BitLockerVolume -MountPoint "C:").KeyProtector.recoverypassword
-    return $key
-    
 }
 
 # Check if TPM Security is enabled in the BIOS - Returns True or False
@@ -478,8 +471,8 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
         Write-Host "`tBitlocker enabled." -ForegroundColor Green
 
         Write-Host "`tAdding recovery key..." -ForegroundColor Yellow
-
-        Add-RecoveryKeyProtector
+        
+        Add-KeyProtector -RecoveryPassword
 
         Write-Host "`tRecovery key added." -ForegroundColor Green
         
@@ -500,7 +493,7 @@ if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
 # REBOOT REQUIRED here if Bitlocker is enabled above
 
 # Visual C++ Runtime Libraries
-VCChecks
+Install-Redistributables
 
 # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
@@ -530,8 +523,8 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
         Write-Host "`tBitlocker enabled." -ForegroundColor Green
 
         Write-Host "`tAdding recovery key..." -ForegroundColor Yellow
-
-        Add-RecoveryKeyProtector
+        
+        Add-KeyProtector -RecoveryPassword
 
         Write-Host "`tRecovery key added." -ForegroundColor Green
     }
