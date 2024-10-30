@@ -43,7 +43,7 @@ Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
 
 # Bitlocker status check
 # TODO Refactor all references to use Get-BitlockerState
-function IsVolumeEncrypted {
+<# function IsVolumeEncrypted {
  
     $volume_status = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
 
@@ -53,7 +53,8 @@ function IsVolumeEncrypted {
 
     return $false
 }
-
+ #>
+ 
 # BIOS verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -342,14 +343,13 @@ if (Get-SMBiosRequiresUpgrade) {
     throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
 }
 
-# Initial check for Bitlocker. Checks for Reboots, VolumeStatus, KeyProtectors, and ProtectionStatus
-# Lines 336-348 are explicitly for the message "Bitlocker Awaiting Activation" in Control Panel
-$bitlocker_status = Get-BitlockerState
 
-# TODO Current development starting here
-# TODO Add transcipt stops where needed
+
+
+# Current development starting here
+# Add transcipt stops where needed
 # 
-switch ($bitlocker_status.IsRebootRequired()) {
+<# switch ($bitlocker_status.IsRebootRequired()) {
 
     {$_ -gt 0} { throw "REBOOT REQUIRED"  }
     {$_ -eq 0} {
@@ -423,7 +423,7 @@ switch ($bitlocker_status.IsRebootRequired()) {
             
         }
     } 
-}
+} #>
 
 
 #FullyDecrypted=0, FullyEncrypted=1
@@ -461,8 +461,9 @@ if (!(IsRebootRequired)){
 
 # If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
+$bitlocker_status = Get-BitlockerState
 # TODO update to use Get-BitlockerState
-if ($TPMState.CheckTPMReady() -and !(IsVolumeEncrypted)) {
+if ($TPMState.CheckTPMReady() -and !($bitlocker_status.IsVolumeEncrypted())) {
     Write-Host "TPM is ready! Attempting to enable Bitlocker..." -ForegroundColor Green
     try {
 

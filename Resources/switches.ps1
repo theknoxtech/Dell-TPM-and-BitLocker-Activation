@@ -1,6 +1,3 @@
-function EncryptState{
-    
-}
 
 
 switch ($bitlocker_status.IsVolumeEncrypted()) {
