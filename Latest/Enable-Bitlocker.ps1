@@ -377,7 +377,7 @@ Switch ($bitlocker_settings) {
 }
 
 
-if ($TPMState.CheckTPMReady() -and !($bitlocker_status.IsVolumeEncrypted())) {
+if ($TPMState.CheckTPMReady() -and !($bitlocker_settings.Encrypted)) {
     Write-Host "TPM is ready! Attempting to enable Bitlocker..." -ForegroundColor Green
     try {
 
