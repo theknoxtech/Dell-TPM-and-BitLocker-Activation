@@ -1,12 +1,11 @@
 
-
 switch ($bitlocker_status.IsVolumeEncrypted()) {
 
-    {$_ -eq 0} {   
+    {$_ -eq $false} {   
         Write-Error -Message "FAILURE: DRIVE NOT ENCRYPTED" -Category NotEnabled
         Write-Host "`tContinuing to enable Bitlocker" -ForegroundColor Yellow break
     }
-    {$_ -eq 1} { 
+    {$_ -eq $true} { 
         Write-Host "SUCCESS: Drive is FullyEncrypted. Checking Key Protectors." -ForegroundColor Yellow
     }
     

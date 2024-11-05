@@ -54,7 +54,7 @@ Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
     return $false
 }
  #>
- 
+
 # BIOS verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -107,6 +107,7 @@ function Get-BitlockerState {
     $BitlockerState | Add-Member NoteProperty "VolumeStatus" $ERGBitlocker.VolumeStatus
     $BitlockerState | Add-Member NoteProperty "ProtectionStatus" $ERGBitlocker.ProtectionStatus
     $BitlockerState | Add-Member NoteProperty "KeyProtector" $ERGBitlocker.KeyProtector
+    
     $BitlockerState | Add-Member ScriptMethod "IsTPMKeyPresent" {
         $tpm_key = ($this.KeyProtector).KeyProtectorType
         
@@ -154,7 +155,6 @@ function Get-BitlockerState {
         }
 
      }
-
     return $BitlockerState
 }
 
@@ -186,9 +186,6 @@ function Set-BitlockerState {
     }
 
 }
-
-
-
 
 # Check if Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
 function Install-Redistributables {
@@ -310,6 +307,8 @@ function Add-KeyProtector {
 
 }
 
+
+
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
         
@@ -344,125 +343,40 @@ if (Get-SMBiosRequiresUpgrade) {
 }
 
 
-
-
-# Current development starting here
-# Add transcipt stops where needed
-# 
-<# switch ($bitlocker_status.IsRebootRequired()) {
-
-    {$_ -gt 0} { throw "REBOOT REQUIRED"  }
-    {$_ -eq 0} {
-        Write-Host "SUCCESS: No Reboots Pending... Continuing checks" -ForegroundColor Green
-
-        switch ($bitlocker_status.IsVolumeEncrypted()) {
-
-            {$_ -eq 0} {   
-                Write-Error -Message "FAILURE: DRIVE NOT ENCRYPTED" -Category NotEnabled
-                Write-Host "`tContinuing to enable Bitlocker" -ForegroundColor Yellow break
-            }
-            {$_ -eq 1} { 
-                Write-Host "SUCCESS: Drive is FullyEncrypted. Checking Key Protectors." -ForegroundColor Yellow
-
-                switch ($bitlocker_status.IsTPMKeyPresent()) {
-                    {$_ -eq $true} {  
-                        Write-Host "SUCCESS: TPM Protector found...Continuing checks" -ForegroundColor Yellow
-
-                        switch ($bitlocker_status.IsRecoveryPassword()) {
-                            {$_ -eq $true} {  
-                                Write-Host "SUCCESS: Recovery Password found...Continue checks" -ForegroundColor Yellow
-
-                                switch ($bitlocker_status.IsProtected()) {
-                                    {$_ -eq 1} {
-                                        Write-Host "SUCCESS: Bitlocker fully ENABLED. No action needed!" -ForegroundColor Green
-                                        # TODO Script termination needed here
-                                        break 
-                                    }
-                                    {$_ -eq 0} {
-                                        # TODO Actions if Protection Status is OFF
-                                        try {
-                                            Resume-Bitlocker -MountPoint C:
-                                            Write-Host "SUCCESS: Protection is ENABLED" -ForegroundColor Green
-                                            $ProtectionStatus = $true
-                                        }
-                                        catch {
-                                            throw "FAILURE: Protection NOT ENABLED. Manual Remediation required!"
-                                        }
-                                    }
-                                    
-                                }
-                            }
-                            {$_ -eq $false} {  
-                                # TODO Actions for Recovery Password not found
-                                try {                                    
-                                    Add-RecoveryKeyProtector
-                                    Write-Host "SUCCESS: Recovery key added" -ForegroundColor Green
-                                    $RecoveryKey = $true
-                                }
-                                catch {
-                                    throw "FAILURE: Recovery key NOT added. Manual Remediation required!"
-                                }
-                            }
-                            
-                        }
-                    }
-                    {$_ -eq $false} { 
-                        # TODO Actions for TPM Protector not found
-                        try {                            
-                            Add-TPMKeyProtector
-                            Write-Host "SUCCESS: TPM key ADDED" -ForegroundColor Green
-                            $TPMKey = $true
-                        }
-                        catch {
-                            throw "FAILURE: TPM key NOT ADDED. Manual Remediation required!"
-                        }
-                    }
-                    
-                }
-            }
-            
-        }
-    } 
-} #>
-
-
-#FullyDecrypted=0, FullyEncrypted=1
-# Check if Encrypted, has key protectors, and protection status
-
-<#
-if (!(IsRebootRequired)){
-
-    if ($bitlocker_status.IsBitlockerEnabled()){
-
-        Write-Host "Bitlocker enabled and protection is active." -ForegroundColor Green
-
-    }elseif (!($bitlocker_status.IsBitlockerEnabled())) {
-
-        try {
-            Resume-BitLocker -MountPoint C:
-        }
-        catch {
-            throw "Protection is not enabled. Manual remediation required!"
-        }
-
-    }
-    Stop-Transcript
-    return
-
-}else{
-
-    throw "Bitlocker changes are pending reboot. Reboot and try again!"
-    Stop-Transcript
-}
-#>
-
-
-
-
-# If TPM is ready and volume is NOT encrypted, enable Bitlocker
 $TPMState = Get-TPMState
 $bitlocker_status = Get-BitlockerState
-# TODO update to use Get-BitlockerState
+$bitlocker_settings = @{
+
+    Encrypted = $bitlocker_status.IsVolumeEncrypted()
+    RebootNeeded = $bitlocker_status.IsRebootRequired()
+    TPMProtectorExists = $bitlocker_status.IsTPMKeyPresent()
+    RecoveryPasswordExists = $bitlocker_status.IsRecoveryPassword()
+    Protected = $bitlocker_status.IsProtected()
+}
+
+
+Switch ($bitlocker_settings) {
+    {$_.RebootNeeded -eq $true} {
+        throw "REBOOT REQUIRED"
+    }
+    {$_.Encrypted -eq $false} {
+        Write-Host "Volume NOT ENCRYPTED..Attempting to enable"; break
+    }
+    {$_.TPMProtectorExists -eq $false} {
+        Add-KeyProtector -TPMProtector
+        continue
+    }
+    {$_.RecoveryPasswordExists -eq $false} {
+        Add-KeyProtector -RecoveryPassword
+        continue
+    }
+    {$_.Protected -eq $false} {
+        Resume-Bitlocker -MountPoint "C:"
+    }
+
+}
+
+
 if ($TPMState.CheckTPMReady() -and !($bitlocker_status.IsVolumeEncrypted())) {
     Write-Host "TPM is ready! Attempting to enable Bitlocker..." -ForegroundColor Green
     try {
