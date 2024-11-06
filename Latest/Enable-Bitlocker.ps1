@@ -358,6 +358,7 @@ Switch ($bitlocker_status.IsRebootRequired()){
         throw "REBOOT REQUIRED"
     }
 }
+
 Switch ($bitlocker_settings) {
     {$_.Encrypted -eq $false} {
         Write-Host "Volume NOT ENCRYPTED..Attempting to enable encryption" -ForegroundColor Yellow ; break
