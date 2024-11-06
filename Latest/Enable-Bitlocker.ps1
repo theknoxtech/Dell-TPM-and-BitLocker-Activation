@@ -347,20 +347,20 @@ $TPMState = Get-TPMState
 $bitlocker_status = Get-BitlockerState
 $bitlocker_settings = @{
 
-    Encrypted = $bitlocker_status.IsVolumeEncrypted()
-    RebootNeeded = $bitlocker_status.IsRebootRequired()
-    TPMProtectorExists = $bitlocker_status.IsTPMKeyPresent()
-    RecoveryPasswordExists = $bitlocker_status.IsRecoveryPassword()
-    Protected = $bitlocker_status.IsProtected()
+    "Encrypted" = $bitlocker_status.IsVolumeEncrypted()
+    "TPMProtectorExists" = $bitlocker_status.IsTPMKeyPresent()
+    "RecoveryPasswordExists" = $bitlocker_status.IsRecoveryPassword()
+    "Protected" = $bitlocker_status.IsProtected()
 }
 
-
-Switch ($bitlocker_settings) {
-    {$_.RebootNeeded -eq $true} {
+Switch ($bitlocker_status.IsRebootRequired()){
+    {$_ -gt 0} {
         throw "REBOOT REQUIRED"
     }
+}
+Switch ($bitlocker_settings) {
     {$_.Encrypted -eq $false} {
-        Write-Host "Volume NOT ENCRYPTED..Attempting to enable"; break
+        Write-Host "Volume NOT ENCRYPTED..Attempting to enable encryption" -ForegroundColor Yellow ; break
     }
     {$_.TPMProtectorExists -eq $false} {
         Add-KeyProtector -TPMProtector
@@ -372,9 +372,23 @@ Switch ($bitlocker_settings) {
     }
     {$_.Protected -eq $false} {
         Resume-Bitlocker -MountPoint "C:"
+        break
+    }
+    
+  
+}
+
+ForEach ($setting in $bitlocker_settings.GetEnumerator()){
+
+    if ($setting.value -eq $true) {
+        
+        Write-Host "The setting $($setting.Name) is $($setting.value)"
     }
 
 }
+
+
+
 
 
 if ($TPMState.CheckTPMReady() -and !($bitlocker_settings.Encrypted)) {
@@ -382,14 +396,11 @@ if ($TPMState.CheckTPMReady() -and !($bitlocker_settings.Encrypted)) {
     try {
 
         Set-BitlockerState
-        
-        Write-Host "`tBitlocker enabled." -ForegroundColor Green
 
-        Write-Host "`tAdding recovery key..." -ForegroundColor Yellow
-        
         Add-KeyProtector -RecoveryPassword
-
-        Write-Host "`tRecovery key added." -ForegroundColor Green
+        
+        Write-Host "Bitlocker enabled." -ForegroundColor Green
+        Write-Host "Recovery key added." -ForegroundColor Green
         
     }
     catch {
