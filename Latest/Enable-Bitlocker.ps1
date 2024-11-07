@@ -36,10 +36,11 @@ None.
 # Global Variables
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
-$global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM
+<# $global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM #>
 
 # Start Transcript
-Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
+#Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
+$Log = "$LTSvc\enable_bitlocker.txt"
 
 # Bitlocker status check
 # TODO Refactor all references to use Get-BitlockerState
@@ -54,6 +55,22 @@ Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
     return $false
 }
  #>
+
+# Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
+function Add-LogEntry {
+    
+    Param(
+    [string]$Message
+    )
+
+    $date_time = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
+
+    $entry = "$date_time  $message"
+
+    Add-Content $Log -Value $entry
+
+}
+
 
 # BIOS verion check
 function Get-SMBiosVersion {
@@ -194,32 +211,32 @@ function Set-BitlockerState {
 function Install-Redistributables {
     # Visual C++ Redistributable logic
     # Check for Visual C++ Redistributable packages
-    Write-Host "Loading installed applications..." -ForegroundColor Yellow
+  
     $products = Get-CimInstance win32_product
-    Write-Host "Complete" -ForegroundColor Green
+ 
 
     # Visual C++ 2010 Redistributable
-    Write-Host "Checking for 'Microsoft Visual C++ 2010 Redistributable'..." -ForegroundColor Yellow
+  
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
-        Write-Host "`tMicrosoft Visual C++ 2010 Redistributable detected!" -ForegroundColor Green
+ # TODO Add Logginng for detection of install          
     }
     # Handle install logic
     else {
-        Write-Host "`tInstalling Microsoft Visual C++ 2010 Redistributable..." -ForegroundColor Yellow
+       
         Install-VCRedist2010
-        Write-Host "`tComplete" -ForegroundColor Green
+      
     }
 
     # Visual C++ 2022 Redistributable
-    Write-Host "Checking for 'Microsoft Visual C++ 2022 Redistributable'..." -ForegroundColor Yellow
+ 
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
-        Write-Host "`tMicrosoft Visual C++ 2022 Redistributable detected!" -ForegroundColor Green
+ # TODO Add Logginng for detection of install      
     }
     # Handle install logic
     else {
-        Write-Host "`tInstalling Microsoft Visual C++ 2022 Redistributable..." -ForegroundColor Yellow
+        
         Install-VCRedist2022
-        Write-Host "`tComplete" -ForegroundColor Green
+       
     }
 }
 
@@ -311,7 +328,6 @@ function Add-KeyProtector {
 }
 
 
-
 # Check if TPM Security is enabled in the BIOS - Returns True or False
 function IsTPMSecurityEnabled {
         
@@ -363,8 +379,9 @@ Switch ($bitlocker_status.IsRebootRequired()){
 }
 
 Switch ($bitlocker_settings) {
-    {$_.Encrypted -eq $false} {
-        Write-Host "Volume NOT ENCRYPTED..Attempting to enable encryption" -ForegroundColor Yellow ; break
+    {($_.Encrypted -eq $false) -and ($TPMState.CheckTPMReady() -eq $true)} {
+        
+        Set-BitlockerState
     }
     {$_.TPMProtectorExists -eq $false} {
         Add-KeyProtector -TPMProtector
@@ -390,9 +407,9 @@ ForEach ($setting in $bitlocker_settings.GetEnumerator()){
         Write-Host "The setting $($setting.Name) is $($setting.value)"
         $enabled_settings = $enabled_settings + 1
     }
-
+    
 }
-
+$enabled_settings
 
 
 
