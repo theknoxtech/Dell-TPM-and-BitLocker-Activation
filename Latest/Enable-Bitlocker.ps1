@@ -379,14 +379,17 @@ Switch ($bitlocker_settings) {
   
 }
 
+$enabled_settings = 0
 ForEach ($setting in $bitlocker_settings.GetEnumerator()){
 
     if ($setting.value -eq $true) {
         
         Write-Host "The setting $($setting.Name) is $($setting.value)"
+        $enabled_settings = $enabled_settings + 1
     }
 
 }
+
 
 
 
