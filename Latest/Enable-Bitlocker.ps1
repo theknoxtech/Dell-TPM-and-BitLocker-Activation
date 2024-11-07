@@ -60,14 +60,23 @@ $Log = "$LTSvc\enable_bitlocker.txt"
 function Add-LogEntry {
     
     Param(
-    [string]$Message
+    [string]$Message,
+    [string]$Type
     )
 
     $date_time = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
 
-    $entry = "$date_time  $message"
+    $entry = "$message"
 
-    Add-Content $Log -Value $entry
+    if ($type -eq "Debug") {
+
+        Add-Content $Log -Value "$date_time DEBUG: $entry"
+
+    }elseif ($type -eq "Error") {
+
+        Add-Content $Log -Value "$date_time ERROR: $($_.Exception.Message)"
+    }
+   
 
 }
 
