@@ -365,11 +365,11 @@ Switch ($bitlocker_settings) {
     }
     {$_.TPMProtectorExists -eq $false} {
         Add-KeyProtector -TPMProtector
-        continue
+        
     }
     {$_.RecoveryPasswordExists -eq $false} {
         Add-KeyProtector -RecoveryPassword
-        continue
+        
     }
     {$_.Protected -eq $false} {
         Resume-Bitlocker -MountPoint "C:"
