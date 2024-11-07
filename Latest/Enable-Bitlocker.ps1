@@ -36,7 +36,7 @@ None.
 # Global Variables
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
-
+$global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM
 
 # Start Transcript
 Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
@@ -79,6 +79,9 @@ function Get-SMBiosRequiresUpgrade {
 # TODO Review Get-TPMState Function 
 ##
 # Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
+<# ($TPMStatus | Invoke-CimMethod -MethodName "IsReady").IsReady
+($TPMStatus | Invoke-CimMethod -MethodName "IsEnabled").IsEnabled
+($TPMStatus | Invoke-CimMethod -MethodName "Isactivated").IsActivated #>
 function Get-TPMState {
 
     $TPM = Get-Tpm
