@@ -218,25 +218,29 @@ function Install-Redistributables {
     # Visual C++ 2010 Redistributable
   
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
- # TODO Add Logginng for detection of install          
+    
+        Add-LogEntry "Visual C++ 2010 already installed"
     }
     # Handle install logic
     else {
        
         Install-VCRedist2010
-      
-    }
 
+         Add-LogEntry "Visual C++ 2010 has been installed"
+    }
     # Visual C++ 2022 Redistributable
  
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
- # TODO Add Logginng for detection of install      
+
+         Add-LogEntry "Visual C++ 2022 already installed"
+
     }
     # Handle install logic
     else {
         
         Install-VCRedist2022
-       
+
+        Add-LogEntry "Visual C++ 2010 has been installed"
     }
 }
 
@@ -346,7 +350,7 @@ function IsTPMActivated {
 
 # Check Execution Policy
 if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")) {
-
+# TODO add error handling here
     try {
         Set-ExecutionPolicy Bypass -Force
     }
@@ -392,6 +396,7 @@ Switch ($bitlocker_settings) {
         
     }
     {$_.Protected -eq $false} {
+        # TODO add error handling here
         Resume-Bitlocker -MountPoint "C:"
         break
     }
