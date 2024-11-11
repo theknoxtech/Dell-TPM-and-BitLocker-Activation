@@ -359,7 +359,6 @@ function IsTPMActivated {
 
 # Check Execution Policy
 if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")) {
-# TODO add error handling here
     try {
         Set-ExecutionPolicy Bypass -Force
     }
@@ -383,6 +382,7 @@ $bitlocker_settings = @{
     "TPMProtectorExists" = $bitlocker_status.IsTPMKeyPresent()
     "RecoveryPasswordExists" = $bitlocker_status.IsRecoveryPassword()
     "Protected" = $bitlocker_status.IsProtected()
+    "TPMReady" = $TPMState.CheckTPMReady()
 }
 
 Switch ($bitlocker_status.IsRebootRequired()){
@@ -412,52 +412,12 @@ Switch ($bitlocker_settings) {
         }
         break
     }
-    
-  
-}
-
-$enabled_settings = 0
-ForEach ($setting in $bitlocker_settings.GetEnumerator()){
-
-    if ($setting.value -eq $true) {
-        
-        Write-Host "The setting $($setting.Name) is $($setting.value)"
-        $enabled_settings = $enabled_settings + 1
+    {$_.TPMReady -eq $false } {
+        Add-LogEntry -Type "Debug" -Message "TPM NOT Ready: Attempting to enable"; break
     }
     
 }
-$enabled_settings
 
-
-
-
-
-if ($TPMState.CheckTPMReady() -and !($bitlocker_settings.Encrypted)) {
-    Write-Host "TPM is ready! Attempting to enable Bitlocker..." -ForegroundColor Green
-    try {
-
-        Set-BitlockerState
-
-        Add-KeyProtector -RecoveryPassword
-        
-        Write-Host "Bitlocker enabled." -ForegroundColor Green
-        Write-Host "Recovery key added." -ForegroundColor Green
-        
-    }
-    catch {
-        throw "Bitlocker was not enabled."
-    }
-    Write-Host "Bitlocker enabled. REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black  
-    return
-    Stop-Transcript
-    
-}elseif (!($TPMstate.CheckTPMReady())) {
-
-    Write-Host "TPM check has failed! Attempting to remeditate..." -ForegroundColor Yellow
-
-}
- 
-# REBOOT REQUIRED here if Bitlocker is enabled above
 
 # Visual C++ Runtime Libraries
 Install-Redistributables
@@ -465,7 +425,7 @@ Install-Redistributables
 # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
-    Write-Host "Attempting to install DellBiosProvider..." -ForegroundColor Yellow
+    Add-LogEntry -Type "Debug" -Message "Installing DellBiosProvider"
 
     try {
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
@@ -475,10 +435,10 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
     }
     catch {
         throw "DellBiosProvider was not installed. Manual remediation required!"
-        Stop-Transcript
+        
     }
 
-    Write-Host "DellBiosProvider installed successfully!" -ForegroundColor Green
+    Add-LogEntry -Type "Debug" -Message "DellBiosProvider installed successfully!" 
 
 }elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
 
@@ -487,22 +447,18 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
         Set-BitlockerState
         
-        Write-Host "`tBitlocker enabled." -ForegroundColor Green
-
-        Write-Host "`tAdding recovery key..." -ForegroundColor Yellow
-        
         Add-KeyProtector -RecoveryPassword
 
-        Write-Host "`tRecovery key added." -ForegroundColor Green
+        Add-LogEntry -Type "Debug" -Message "Bitlocker enabled"
     }
     catch {
         throw "Bitlocker was not enabled. Manual remediation required!"
-        Stop-Transcript
+        Add-LogEntry -Type "Error"
     }
 
-    Write-Host "Bitlocker enabled. REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
+    Add-LogEntry -Type "Debug" -Message "REBOOT REQUIRED"
     return 
-    Stop-Transcript
+   
 
 }
 
@@ -520,7 +476,7 @@ if (!(IsBIOSPasswordSet)) {
     catch {
 
         throw "Setting BIOS password failed. Manual remediation required!"
-        Stop-Transcript
+        Add-LogEntry -Type "Error"
     }
     Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green -BackgroundColor Black
     Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green -BackgroundColor Black
@@ -528,7 +484,7 @@ if (!(IsBIOSPasswordSet)) {
 else {
     
     throw "Unknown BIOS password detected. Manual remediation required!"
-    Stop-Transcript
+    Add-LogEntry -Type "Error"
 }
  
 # Enable TPM scurity in the BIOS
@@ -549,11 +505,10 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled")) {
     }
     catch {
         throw "TPM not enabled. Manual remediation required!"
-        Stop-Transcript
+        Add-LogEntry -Type "Error"
     }
 
-    Write-Host "TPM enabled. REBOOT REQUIRED!" -ForegroundColor Red -BackgroundColor Black
-    Stop-Transcript
+    Add-LogEntry -Type "Debug" -Message "TPM Enabled: REBOOT REQUIRED"
 
 }
 
@@ -569,7 +524,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")) {
     }
     catch {
         throw "BIOS password was not removed. Manual remediation required!"
-        Stop-Transcript
+         Add-LogEntry -Type "Error"
     }
 
     Write-Host "BIOS password has been removed:" $biospw_validation -ForegroundColor Green -BackgroundColor Black
@@ -577,7 +532,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Enabled")) {
 else {
 
     throw "Bitlocker was not enabled. Manual remediation required!"
-    Stop-Transcript
+     Add-LogEntry -Type "Error"
 }
 
 # Remove BiosPW.txt
@@ -585,18 +540,18 @@ if (IsBIOSPasswordSet) {
     Write-Host "Attempting to delete BiosPW.txt" -ForegroundColor Yellow
 
     throw "Remove the BIOS password before deleting the file. Manual remediation required!"
-    Stop-Transcript
+    Add-LogEntry -Type "Error"
 
 }
 else {
     
     Remove-Item -Path $LTSvc\Biospw.txt -Force
     
-    Write-Host "Biospw.txt has been successfully removed!" -ForegroundColor Green
+    Add-LogEntry -Type "Debug" -Message "Biospw.txt has been successfully removed!" 
 }
 
-Write-Host "REBOOT REQUIRED: Rerun after script reboot to finish Bitlocker setup" -ForegroundColor Red -BackgroundColor Black
+Add-LogEntry -Type "Debug" -Message "REBOOT REQUIRED: Rerun after script reboot to finish Bitlocker setup"
 
 # REBOOT REQUIRED HERE
 
-Stop-Transcript
+
