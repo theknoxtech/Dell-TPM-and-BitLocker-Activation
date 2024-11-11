@@ -228,20 +228,20 @@ function Install-Redistributables {
   
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
     
-        Add-LogEntry "Visual C++ 2010 already installed"
+        Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 already installed"
     }
     # Handle install logic
     else {
        
         Install-VCRedist2010
 
-         Add-LogEntry "Visual C++ 2010 has been installed"
+         Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 has been installed"
     }
     # Visual C++ 2022 Redistributable
  
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
 
-         Add-LogEntry "Visual C++ 2022 already installed"
+         Add-LogEntry -Type "Debug" -Message "Visual C++ 2022 already installed"
 
     }
     # Handle install logic
@@ -249,7 +249,7 @@ function Install-Redistributables {
         
         Install-VCRedist2022
 
-        Add-LogEntry "Visual C++ 2010 has been installed"
+        Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 has been installed"
     }
 }
 
@@ -404,9 +404,12 @@ Switch ($bitlocker_settings) {
         Add-KeyProtector -RecoveryPassword
         
     }
-    {$_.Protected -eq $false} {
-        # TODO add error handling here
-        Resume-Bitlocker -MountPoint "C:"
+    {($_.Protected -eq $false) -and ($bitlocker_settings.TPMProtectorExists -eq $true) -and ($bitlocker_settings.RecoveryPasswordExists -eq $true) } {
+        try {
+        Resume-Bitlocker -MountPoint "C:" -ErrorAction Stop
+        }Catch [System.Runtime.InteropServices.COMException] {
+            Add-LogEntry -Type "Error" -Message 
+        }
         break
     }
     
