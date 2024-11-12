@@ -77,17 +77,18 @@ function Add-LogEntry {
         ([Logs]::Info) {Add-Content $Log "$timestamp INFO: $message"; break}
         (default) {Add-Content $Log "$timestamp []: $message"} 
     }
+}
 
-<# 
-    if ($type -eq "Debug") {
+# Convert exception to string, match for Hresult code and return it
+function Get-ExceptionCode {
+    $errorcode = ($_.Exception.Message).ToString()
+    $regex = "\((0x[0-9A-Fa-f]+)\)"
 
-        Add-Content $Log -Value "$date_time DEBUG: $entry"
+    if ($errorcode -match $regex) {
 
-    }elseif ($type -eq "Error") {
-
-        Add-Content $Log -Value "$date_time ERROR: $($_.Exception.Message)"
-    } #>
-   
+        $regex = $Matches[1]
+        return $regex
+    }
 
 }
 
@@ -447,6 +448,8 @@ Switch ($bitlocker_settings) {
     {$_.Protected -eq $false} {
         try {
             Resume-BitLocker -MountPoint c: -ErrorAction Stop
+
+            Add-LogEntry -Type Info -Message "Protection has been enabled"
         }
         catch [System.Runtime.InteropServices.COMException] {
             Add-LogEntry -Type Error -Message $_.Exception.Message
@@ -470,7 +473,7 @@ Switch ($bitlocker_settings) {
         }
       }
     {$_.TPMReady -eq $false } {
-        Add-LogEntry -Type "Debug" -Message "TPM NOT Ready: Attempting to enable"; break
+        Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
     }
     
 }
@@ -482,7 +485,7 @@ Install-Redistributables
 # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
-    Add-LogEntry -Type "Debug" -Message "Installing DellBiosProvider"
+    Add-LogEntry -Type Debug -Message "Installing DellBiosProvider"
 
     try {
         Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
@@ -495,7 +498,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
         
     }
 
-    Add-LogEntry -Type "Debug" -Message "DellBiosProvider installed successfully!" 
+    Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully!" 
 
 }elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
 

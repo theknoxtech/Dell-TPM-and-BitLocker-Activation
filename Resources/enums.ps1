@@ -20,6 +20,20 @@ function Add-LogEntry {
     }
 }
 
+# Convert exception to string, match for Hresult code and return it
+function Get-ExceptionCode {
+    $errorcode = ($_.Exception.Message).ToString()
+    $regex = "\((0x[0-9A-Fa-f]+)\)"
+
+    if ($errorcode -match $regex) {
+
+        $regex = $Matches[1]
+        return $regex
+    }
+
+}
+
+
     $bitlocker_status = Get-BitlockerState
     $bitlocker_settings = @{
     
@@ -41,8 +55,9 @@ function Add-LogEntry {
             catch [System.Runtime.InteropServices.COMException] {
                 Add-LogEntry -Type Error -Message $_.Exception.Message
                  # Attempt to encrypt drive
-                $errorcode = ($_.Exception.Message).ToString()
-                if ($errorcode.Contains(("0x80310001"))) {
+                #$errorcode = ($_.Exception.Message).ToString()
+                
+                if (Get-ExceptionCode -contains "0x80310001") {
                     
                     Set-BitlockerState
     
