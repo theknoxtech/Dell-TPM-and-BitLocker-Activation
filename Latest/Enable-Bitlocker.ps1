@@ -57,17 +57,28 @@ $Log = "$LTSvc\enable_bitlocker.txt"
  #>
 
 # Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
+enum Logs {
+    Error
+    Debug
+    Info
+}
 function Add-LogEntry {
     
     Param(
     [string]$Message,
-    [string]$Type
+    [Logs]$Type
     )
 
-    $date_time = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
+    $timestamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
 
-    $entry = "$message"
+    switch ($Type) {
+        ([Logs]::Debug) {Add-Content $Log "$timestamp DEBUG: $message"; break  }
+        ([Logs]::Error) {Add-Content $Log "$timestamp ERROR: $message"; break }
+        ([Logs]::Info) {Add-Content $Log "$timestamp INFO: $message"; break}
+        (default) {Add-Content $Log "$timestamp []: $message"} 
+    }
 
+<# 
     if ($type -eq "Debug") {
 
         Add-Content $Log -Value "$date_time DEBUG: $entry"
@@ -75,7 +86,7 @@ function Add-LogEntry {
     }elseif ($type -eq "Error") {
 
         Add-Content $Log -Value "$date_time ERROR: $($_.Exception.Message)"
-    }
+    } #>
    
 
 }
@@ -378,6 +389,7 @@ $TPMState = Get-TPMState
 $bitlocker_status = Get-BitlockerState
 $bitlocker_settings = @{
 
+    "IsRebootPending" = $bitlocker_status.IsRebootRequired()
     "Encrypted" = $bitlocker_status.IsVolumeEncrypted()
     "TPMProtectorExists" = $bitlocker_status.IsTPMKeyPresent()
     "RecoveryPasswordExists" = $bitlocker_status.IsRecoveryPassword()
@@ -385,7 +397,7 @@ $bitlocker_settings = @{
     "TPMReady" = $TPMState.CheckTPMReady()
 }
 
-Switch ($bitlocker_status.IsRebootRequired()){
+Switch ($bitlocker_settings.IsRebootPending){
     {$_ -gt 0} {
         try {
             throw "REBOOT REQUIRED before proceeding."
@@ -400,7 +412,7 @@ Switch ($bitlocker_status.IsRebootRequired()){
 }
 
 Switch ($bitlocker_settings) {
-    {($_.Encrypted -eq $false) -and ($TPMState.CheckTPMReady() -eq $true)} {
+    {($_.Encrypted -eq $false) -and ($bitlocker_settings.TPMReady -eq $true)} {
         try {
             Set-BitlockerState
         }
@@ -412,6 +424,7 @@ Switch ($bitlocker_settings) {
     }
     {$_.TPMProtectorExists -eq $false} {
         try {
+
             Add-KeyProtector -TPMProtector
         }
         catch [System.Runtime.InteropServices.COMException] {
@@ -431,17 +444,31 @@ Switch ($bitlocker_settings) {
         
         
     }
-    {($_.Protected -eq $false)} {
+    {$_.Protected -eq $false} {
         try {
-
-        Resume-Bitlocker -MountPoint "C:" -ErrorAction Stop
-        
-        }Catch [System.Runtime.InteropServices.COMException] {
-            # TODO Add if statement to recover 
-            Add-LogEntry -Type "Error"
+            Resume-BitLocker -MountPoint c: -ErrorAction Stop
         }
-        Exit 
-    }
+        catch [System.Runtime.InteropServices.COMException] {
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+
+             # 0x80310001: Drive Not Encrypted - Recover and attempt to enable Bitlocker
+            $errorcode = ($_.Exception.Message).ToString()
+            if ($errorcode.Contains(("0x80310001"))) {
+                Add-LogEntry -Type Debug -Message "Enabling protection failed. Attempting to enable Bitlocker"
+
+                Set-BitlockerState
+                Add-KeyProtector -RecoveryPassword
+                Resume-BitLocker -MountPoint C:
+
+                Add-LogEntry -Type Info -Message "Bitlocker has been enabled"
+            }else {
+                
+                Add-LogEntry -Type Error -Message $_.Exception.Message
+            }
+        
+            
+        }
+      }
     {$_.TPMReady -eq $false } {
         Add-LogEntry -Type "Debug" -Message "TPM NOT Ready: Attempting to enable"; break
     }
