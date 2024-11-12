@@ -387,30 +387,60 @@ $bitlocker_settings = @{
 
 Switch ($bitlocker_status.IsRebootRequired()){
     {$_ -gt 0} {
-        throw "REBOOT REQUIRED"
+        try {
+            throw "REBOOT REQUIRED before proceeding."
+        }
+        catch {
+            Add-LogEntry -Type "Error"
+            exit
+        }
+        
+        
     }
 }
 
 Switch ($bitlocker_settings) {
     {($_.Encrypted -eq $false) -and ($TPMState.CheckTPMReady() -eq $true)} {
+        try {
+            Set-BitlockerState
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+            
+            Add-LogEntry -Type "Error"
+        }
         
-        Set-BitlockerState
     }
     {$_.TPMProtectorExists -eq $false} {
-        Add-KeyProtector -TPMProtector
+        try {
+            Add-KeyProtector -TPMProtector
+        }
+        catch [System.Runtime.InteropServices.COMException] {
         
+            Add-LogEntry -Type "Error"
+        }
+       
     }
     {$_.RecoveryPasswordExists -eq $false} {
-        Add-KeyProtector -RecoveryPassword
+        try {
+            Add-KeyProtector -RecoveryPassword
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+
+            Add-LogEntry -Type "Error"
+        }
+        
         
     }
-    {($_.Protected -eq $false) -and ($bitlocker_settings.TPMProtectorExists -eq $true) -and ($bitlocker_settings.RecoveryPasswordExists -eq $true) } {
+    {($_.Protected -eq $false)} {
         try {
+
         Resume-Bitlocker -MountPoint "C:" -ErrorAction Stop
+        
         }Catch [System.Runtime.InteropServices.COMException] {
-            Add-LogEntry -Type "Error" -Message 
+            # TODO Add if statement to recover 
+            Add-LogEntry -Type "Error"
         }
-        break
+        Exit 
     }
     {$_.TPMReady -eq $false } {
         Add-LogEntry -Type "Debug" -Message "TPM NOT Ready: Attempting to enable"; break
