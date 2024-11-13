@@ -38,25 +38,9 @@ $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 <# $global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM #>
 
-# Start Transcript
-#Start-Transcript -Path $LTSvc\enable_bitlocker.txt -Verbose
+# Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
 $Log = "$LTSvc\enable_bitlocker.txt"
 
-# Bitlocker status check
-# TODO Refactor all references to use Get-BitlockerState
-<# function IsVolumeEncrypted {
- 
-    $volume_status = (Get-BitLockerVolume -MountPoint "C:" -ErrorAction SilentlyContinue).VolumeStatus
-
-    if ($volume_status -eq "FullyEncrypted" -or $volume_status -eq "EncryptionInProgress") {
-        return $true
-    }
-
-    return $false
-}
- #>
-
-# Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
 enum Logs {
     Error
     Debug
