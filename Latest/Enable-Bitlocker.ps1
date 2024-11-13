@@ -81,13 +81,17 @@ function Add-LogEntry {
 
 # Convert exception to string, match for Hresult code and return it
 function Get-ExceptionCode {
-    $errorcode = ($_.Exception.Message).ToString()
+
+    param (
+        [String]$errorcode
+    )
+    
     $regex = "\((0x[0-9A-Fa-f]+)\)"
 
-    if ($errorcode -match $regex) {
+    if ($errorcode.ToString() -match $regex) {
 
-        $regex = $Matches[1]
-        return $regex
+        $code = $Matches[1]
+        return $code
     }
 
 }
@@ -229,9 +233,9 @@ function Set-BitlockerState {
 }
 
 # Check if Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
+# TODO Add error handling here
 function Install-Redistributables {
-    # Visual C++ Redistributable logic
-    # Check for Visual C++ Redistributable packages
+   
   
     $products = Get-CimInstance win32_product
  
@@ -240,33 +244,52 @@ function Install-Redistributables {
   
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
     
-        Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 already installed"
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2010 already installed"
     }
-    # Handle install logic
+    
     else {
        
-        Install-VCRedist2010
+        Add-LogEntry -Debug -Message "Installing Microsoft Visual C++ 2010"
 
-         Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 has been installed"
+        $working_dir = $PWD
+
+        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
+        Set-Location $LTSvc
+        .\vcredist_2010_x64.exe /extract:vc2010 /q 
+        Start-Sleep -Seconds 1.5
+        Set-Location $LTSvc\vc2010
+        .\Setup.exe /q | Wait-Process
+    
+        Set-Location $working_dir
+
+        Add-LogEntry -Type Info -Message "Visual C++ 2010 has been installed"
     }
     # Visual C++ 2022 Redistributable
  
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
 
-         Add-LogEntry -Type "Debug" -Message "Visual C++ 2022 already installed"
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2022 already installed"
 
     }
-    # Handle install logic
+   
     else {
         
-        Install-VCRedist2022
+        Add-LogEntry -Type Debug -Message "Installing Visual C++ 2022"
 
-        Add-LogEntry -Type "Debug" -Message "Visual C++ 2010 has been installed"
+        $working_dir = $PWD
+
+        [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
+        Set-Location $LTSvc
+        .\vc_redist.x64.exe /q | Wait-Process
+    
+        Set-Location $working_dir
+
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2022 has been installed"
     }
 }
 
 # Visual C++ Redistributable 2010
-function Install-VCRedist2010 {
+<# function Install-VCRedist2010 {
     $working_dir = $PWD
 
     [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
@@ -277,10 +300,10 @@ function Install-VCRedist2010 {
     .\Setup.exe /q | Wait-Process
 
     Set-Location $working_dir
-}
+} #>
 
 # Visual C++ Redistributable 2015-2022
-function Install-VCRedist2022 {
+<# function Install-VCRedist2022 {
     $working_dir = $PWD
 
     [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
@@ -288,7 +311,7 @@ function Install-VCRedist2022 {
     .\vc_redist.x64.exe /q | Wait-Process
 
     Set-Location $working_dir
-}
+} #>
 
 # Returns current password value as a [Bool]
 function IsBIOSPasswordSet {
@@ -404,7 +427,7 @@ Switch ($bitlocker_settings.IsRebootPending){
             throw "REBOOT REQUIRED before proceeding."
         }
         catch {
-            Add-LogEntry -Type "Error"
+            Add-LogEntry -Type Error 
             exit
         }
         
@@ -427,10 +450,19 @@ Switch ($bitlocker_settings) {
         try {
 
             Add-KeyProtector -TPMProtector
+            Add-LogEntry -Type Info -Message "TPM Protector has been added"
         }
         catch [System.Runtime.InteropServices.COMException] {
-        
-            Add-LogEntry -Type "Error"
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+
+            # (0x80310031) Only one key protector of this type is allowed for this drive.
+            if (Get-ExceptionCode -contains "0x80310031") {
+                
+                Add-LogEntry -Type Debug -Message "TPM Protector already exists"
+                
+            }else {
+                Add-LogEntry -Type Error -Message $_.Exception.Message
+            }
         }
        
     }
@@ -448,22 +480,20 @@ Switch ($bitlocker_settings) {
     {$_.Protected -eq $false} {
         try {
             Resume-BitLocker -MountPoint c: -ErrorAction Stop
-
-            Add-LogEntry -Type Info -Message "Protection has been enabled"
         }
         catch [System.Runtime.InteropServices.COMException] {
             Add-LogEntry -Type Error -Message $_.Exception.Message
+             # 0x80310001: Drive not encrypted - Attempt to recover and encrypt the drive
+          
+           
+            if (Get-ExceptionCode -errorcode $_.Exception.Message -contains "0x80310001") {
+                
+            Set-BitlockerState
+            Add-KeyProtector -RecoveryPassword
+            Resume-BitLocker -MountPoint C:
 
-             # 0x80310001: Drive Not Encrypted - Recover and attempt to enable Bitlocker
-            $errorcode = ($_.Exception.Message).ToString()
-            if ($errorcode.Contains(("0x80310001"))) {
-                Add-LogEntry -Type Debug -Message "Enabling protection failed. Attempting to enable Bitlocker"
+            Add-LogEntry -Type Info -Message "Bitlocker has been enabled"
 
-                Set-BitlockerState
-                Add-KeyProtector -RecoveryPassword
-                Resume-BitLocker -MountPoint C:
-
-                Add-LogEntry -Type Info -Message "Bitlocker has been enabled"
             }else {
                 
                 Add-LogEntry -Type Error -Message $_.Exception.Message
