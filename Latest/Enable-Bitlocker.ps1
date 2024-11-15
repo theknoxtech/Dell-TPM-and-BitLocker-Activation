@@ -81,6 +81,7 @@ function Get-ExceptionCode {
 }
 
 
+
 # BIOS verion check
 function Get-SMBiosVersion {
     $Bios = Get-CimInstance Win32_BIOS 
@@ -353,12 +354,15 @@ function IsTPMActivated {
 ########################
 
 # Check Execution Policy
-if (((Get-ExecutionPolicy) -ne "Unrestricted") -and ((Get-ExecutionPolicy) -eq "Bypass")) {
+Add-LogEntry -Type Debug -Message "Checking execution policy"
+if (!(Get-ExecutionPolicy) -eq "Bypass") {
     try {
-        Set-ExecutionPolicy Bypass -Force
+        Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
     }
-    catch {
-        throw "Current ExecutionPolicy prohibits this script from running and should be set to Bypass. Manual remediation required!"
+    catch [System.Management.Automation.RuntimeException] {
+        # ERROR: Policy overridden by a policy defined at a more specific scope
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+            Add-LogEntry -Type Error -Message $_.ErrorDetails
     }
 }
 
@@ -381,13 +385,15 @@ $bitlocker_settings = @{
     "TPMReady" = $TPMState.CheckTPMReady()
 }
 
+Add-LogEntry -Type Debug -Message "Checking for pending reboot"
 Switch ($bitlocker_settings.IsRebootPending){
     {$_ -gt 0} {
+
         try {
             throw "REBOOT REQUIRED before proceeding."
         }
         catch {
-            Add-LogEntry -Type Error 
+            Add-LogEntry -Type Error -Message $_.Exception.Message -ErrorAction Stop
             exit
         }
         
@@ -395,21 +401,28 @@ Switch ($bitlocker_settings.IsRebootPending){
     }
 }
 
+Add-LogEntry -Type Info -Message "Starting Bitlocker setting checks"
 Switch ($bitlocker_settings) {
     {($_.Encrypted -eq $false) -and ($bitlocker_settings.TPMReady -eq $true)} {
         try {
+            Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
+
             Set-BitlockerState
+            Add-KeyProtector -RecoveryPassword
+            Resume-BitLocker -MountPoint C:
         }
         catch [System.Runtime.InteropServices.COMException] {
             
-            Add-LogEntry -Type "Error"
+            Add-LogEntry -Type Error -Message $_.Exception.Message
         }
         
     }
     {$_.TPMProtectorExists -eq $false} {
         try {
+            Add-LogEntry -Type Debug -Message "TPMProtector NOT found: Attempting to add TPM Protector"
 
             Add-KeyProtector -TPMProtector
+
             Add-LogEntry -Type Info -Message "TPM Protector has been added"
         }
         catch [System.Runtime.InteropServices.COMException] {
@@ -427,17 +440,22 @@ Switch ($bitlocker_settings) {
        
     }
     {$_.RecoveryPasswordExists -eq $false} {
+        Add-LogEntry -Type Debug -Message "Recover Password NOT found: Attempting to add Recovery Password"
         try {
+            
             Add-KeyProtector -RecoveryPassword
+
+            Add-LogEntry -Type Info -Message "Recover Password has been added"
         }
         catch [System.Runtime.InteropServices.COMException] {
 
-            Add-LogEntry -Type "Error"
+            Add-LogEntry -Type Error -Message $_.Exception.Message
         }
         
         
     }
     {$_.Protected -eq $false} {
+        Add-LogEntry -Type Debug -Message "Protection is NOT enabled. Attempting to enable protection"
         try {
             Resume-BitLocker -MountPoint c: -ErrorAction Stop
         }
