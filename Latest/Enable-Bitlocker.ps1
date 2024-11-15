@@ -272,30 +272,6 @@ function Install-Redistributables {
     }
 }
 
-# Visual C++ Redistributable 2010
-<# function Install-VCRedist2010 {
-    $working_dir = $PWD
-
-    [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
-    Set-Location $LTSvc
-    .\vcredist_2010_x64.exe /extract:vc2010 /q 
-    Start-Sleep -Seconds 1.5
-    Set-Location $LTSvc\vc2010
-    .\Setup.exe /q | Wait-Process
-
-    Set-Location $working_dir
-} #>
-
-# Visual C++ Redistributable 2015-2022
-<# function Install-VCRedist2022 {
-    $working_dir = $PWD
-
-    [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
-    Set-Location $LTSvc
-    .\vc_redist.x64.exe /q | Wait-Process
-
-    Set-Location $working_dir
-} #>
 
 # Returns current password value as a [Bool]
 function IsBIOSPasswordSet {
