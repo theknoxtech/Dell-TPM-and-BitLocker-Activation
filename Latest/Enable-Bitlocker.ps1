@@ -368,9 +368,20 @@ if (!(Get-ExecutionPolicy) -eq "Bypass") {
 
 # Check BIOS Version
 # Upgrade BIOS if not up to date
+Add-LogEntry -Type Debug -Message "Checking BIOS version"
+$current_ver = Get-SMBiosVersion
+$required_ver = 2.4
 if (Get-SMBiosRequiresUpgrade) {
-    throw "BIOS version does not meet minimum requirements and needs to be upgraded. Manual remediation required!"
+   try {
+
+    throw "Current BIOS version $current_ver : Version is out of date. Update BIOS to $required_ver or later and try again"
+
+   }catch {
+
+    Add-LogEntry -Type Error -Message $_.Exception.Message
+   }
 }
+
 
 
 $TPMState = Get-TPMState
@@ -393,8 +404,8 @@ Switch ($bitlocker_settings.IsRebootPending){
             throw "REBOOT REQUIRED before proceeding."
         }
         catch {
-            Add-LogEntry -Type Error -Message $_.Exception.Message -ErrorAction Stop
-            exit
+            Add-LogEntry -Type Error -Message $_.Exception.Message 
+            Exit 
         }
         
         
@@ -413,6 +424,9 @@ Switch ($bitlocker_settings) {
             Set-BitlockerState
             Add-KeyProtector -RecoveryPassword
             Resume-BitLocker -MountPoint C:
+
+            Add-LogEntry -Type Info -Message "Bitlocker is now enabled: Exiting script"
+            Exit
         }
         catch [System.Runtime.InteropServices.COMException] {
             
@@ -460,20 +474,23 @@ Switch ($bitlocker_settings) {
     {$_.Protected -eq $false} {
         Add-LogEntry -Type Debug -Message "Protection is NOT enabled. Attempting to enable protection"
         try {
+
             Resume-BitLocker -MountPoint c: -ErrorAction Stop
+
+            Add-LogEntry -Type Info -Message "Protection has been enabled: Exiting script"
+            Exit 
         }
         catch [System.Runtime.InteropServices.COMException] {
             Add-LogEntry -Type Error -Message $_.Exception.Message
              # 0x80310001: Drive not encrypted - Attempt to recover and encrypt the drive
-          
-           
             if (Get-ExceptionCode -errorcode $_.Exception.Message -contains "0x80310001") {
                 
             Set-BitlockerState
             Add-KeyProtector -RecoveryPassword
             Resume-BitLocker -MountPoint C:
 
-            Add-LogEntry -Type Info -Message "Bitlocker has been enabled"
+            Add-LogEntry -Type Info -Message "Bitlocker has been enabled: Exiting script"
+            Exit
 
             }else {
                 
@@ -497,13 +514,13 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
     Add-LogEntry -Type Debug -Message "Installing DellBiosProvider"
 
     try {
-        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
         Import-Module DellBiosProvider -Verbose
         
     }
     catch {
-        throw "DellBiosProvider was not installed. Manual remediation required!"
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+        Exit 
         
     }
 
@@ -522,7 +539,7 @@ if (!(IsBIOSPasswordSet)) {
     catch {
 
         throw "Setting BIOS password failed. Manual remediation required!"
-        Add-LogEntry -Type "Error"
+    
     }
     Add-LogEntry -Type Info -Message "Current BIOS Password: $GeneratedPW and is saved in biospw.txt"
     
