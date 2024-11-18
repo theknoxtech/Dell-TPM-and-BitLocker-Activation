@@ -524,10 +524,9 @@ if (!(IsBIOSPasswordSet)) {
         throw "Setting BIOS password failed. Manual remediation required!"
         Add-LogEntry -Type "Error"
     }
-    Write-Host "Current BIOS Password: $GeneratedPW" -ForegroundColor Green -BackgroundColor Black
-    Write-Host "Password has been saved to C:\Windows\LTSVC\Packages\biospw.txt" -ForegroundColor Green -BackgroundColor Black
-}
-else {
+    Add-LogEntry -Type Info -Message "Current BIOS Password: $GeneratedPW and is saved in biospw.txt"
+    
+}else {
     
     throw "Unknown BIOS password detected. Manual remediation required!"
     Add-LogEntry -Type "Error"
