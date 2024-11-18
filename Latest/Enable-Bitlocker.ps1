@@ -396,12 +396,24 @@ $bitlocker_settings = @{
     "TPMReady" = $TPMState.CheckTPMReady()
 }
 
-Add-LogEntry -Type Debug -Message "Checking for pending reboot"
 Switch ($bitlocker_settings.IsRebootPending){
-    {$_ -gt 0} {
+    {$_ -eq $true} {
 
         try {
+            if (($bitlocker_settings.Encrypted -eq $true) -and ($bitlocker_settings.TPMProtectorExists -eq $false) -and ($bitlocker_settings.RecoveryPasswordExists -eq $false)){
+
+                Add-KeyProtector -TPMProtector
+                Add-KeyProtector -RecoveryPassword
+                Resume-BitLocker -MountPoint "C:"
+
+                Add-LogEntry -Type Info -Message "TPM and Recovery Password protectors have been added. Protection Status has been turned on"
+                Exit
+
+            }else{
+
             throw "REBOOT REQUIRED before proceeding."
+
+            }
         }
         catch {
             Add-LogEntry -Type Error -Message $_.Exception.Message 
