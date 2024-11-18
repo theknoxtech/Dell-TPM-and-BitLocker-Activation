@@ -403,7 +403,10 @@ Switch ($bitlocker_settings.IsRebootPending){
 
 Add-LogEntry -Type Info -Message "Starting Bitlocker setting checks"
 Switch ($bitlocker_settings) {
-    {($_.Encrypted -eq $false) -and ($bitlocker_settings.TPMReady -eq $true)} {
+    {$_.TPMReady -eq $false } {
+        Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
+    }
+    {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)} {
         try {
             Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
 
@@ -440,12 +443,12 @@ Switch ($bitlocker_settings) {
        
     }
     {$_.RecoveryPasswordExists -eq $false} {
-        Add-LogEntry -Type Debug -Message "Recover Password NOT found: Attempting to add Recovery Password"
+        Add-LogEntry -Type Debug -Message "Recovery Password NOT found: Attempting to add Recovery Password"
         try {
             
             Add-KeyProtector -RecoveryPassword
 
-            Add-LogEntry -Type Info -Message "Recover Password has been added"
+            Add-LogEntry -Type Info -Message "Recovery Password has been added"
         }
         catch [System.Runtime.InteropServices.COMException] {
 
@@ -480,9 +483,7 @@ Switch ($bitlocker_settings) {
             
         }
       }
-    {$_.TPMReady -eq $false } {
-        Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
-    }
+   
     
 }
 
@@ -508,30 +509,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
     Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully!" 
 
-}elseif (!(Get-SMBiosRequiresUpgrade) -and ($TPMState.CheckTPMReady())) {
-
-    Write-Host "Attempting to enable Bitlocker..." -ForegroundColor Yellow
-    try {
-
-        Set-BitlockerState
-        
-        Add-KeyProtector -RecoveryPassword
-
-        Add-LogEntry -Type "Debug" -Message "Bitlocker enabled"
-    }
-    catch {
-        throw "Bitlocker was not enabled. Manual remediation required!"
-        Add-LogEntry -Type "Error"
-    }
-
-    Add-LogEntry -Type "Debug" -Message "REBOOT REQUIRED"
-    return 
-   
-
 }
-
-# REBOOT REQUIRED here if Bitlocker is enabled above
-
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
