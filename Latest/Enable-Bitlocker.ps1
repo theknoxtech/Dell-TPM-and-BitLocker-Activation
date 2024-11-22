@@ -295,6 +295,7 @@ function IsBIOSPasswordSet {
 # Replaces symbols with "_"
 # TODO Add check for Biospw.txt here
 function GenerateRandomPassword {
+
     Param(
         [switch]$SaveToFile
     )
@@ -312,6 +313,7 @@ function GenerateRandomPassword {
 
 # Gets file presence, last password in file, and count of passwords in file
 function Get-FileInfo {
+    [CmdletBinding()]
     param (
         [switch]$IsFilePresent,
         [switch]$GetPassword,
@@ -325,12 +327,18 @@ function Get-FileInfo {
     }
 }
 
-
+# TODO Finish this function
 # Update Set-BiosAdminPassword function with GenerateRandomPassword
 function Set-BiosAdminPassword {
+    [CmdletBinding()]
     Param(
         [switch]$GeneratePassword,
-        [ValidateLength(4,33)][string]$AddPassword,
+
+        [ValidateLength(4,32)]
+        [ValidateNotNullOrEmpty()]
+        [string]$AddPassword,
+
+        [ValidateNotNullOrEmpty]
         [string]$RemovePassword
         
     )
@@ -341,21 +349,8 @@ function Set-BiosAdminPassword {
 
     switch ($_) {
         {$GeneratePassword} {($format_password | Out-File $LTSvc\BiosPW.txt -Append)}
-
-        {$AddPassword} {(Set-Item -Path DellSmBios:\Security\AdminPassword $AddPassword -ErrorAction Stop)}
-
+        {$AddPassword} {Set-Item -Path DellSmBios:\Security\AdminPassword $AddPassword -ErrorAction Stop}
         {$RemovePassword} {(Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $RemovePassword -ErrorAction Stop)}
-    }
-
-    if ($GeneratePassword){
-
-        $format_password | Out-File $LTSvc\BiosPW.txt -Append
-
-    }elseif ($AddPassword){
-        
-        $AddPassword = Get-FileInfo -GetPassword
-        Set-Item -Path DellSmBios:\Security\AdminPassword $AddPassword -ErrorAction Stop
-
     }
 }
 
