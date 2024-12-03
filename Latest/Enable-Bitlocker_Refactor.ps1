@@ -79,13 +79,9 @@ function Get-ExceptionCode {
     }
 
 }
-##
-# TODO Review Get-TPMState Function 
-##
+
+
 # Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
-<# ($TPMStatus | Invoke-CimMethod -MethodName "IsReady").IsReady
-($TPMStatus | Invoke-CimMethod -MethodName "IsEnabled").IsEnabled
-($TPMStatus | Invoke-CimMethod -MethodName "Isactivated").IsActivated #>
 function Get-TPMState {
 
     $TPM = Get-Tpm
@@ -167,9 +163,7 @@ function Get-BitlockerState {
 
 # Query Bitlocker and Set-BitlockerState
 function Set-BitlockerState {
-    $tpm = Get-TPMState
-    $encrypt_state = Get-BitlockerState
-
+    
     $bitlocker_options = @{
 
         MountPoint       = "C:"
@@ -179,81 +173,10 @@ function Set-BitlockerState {
         SkiphardwareTest = $true
 
     }
-
-    if ((!($encrypt_state.IsVolumeEncrypted())) -and $tpm.CheckTPMReady()) {
-
-        try {
-            
-            Enable-Bitlocker @bitlocker_options
-            Add-KeyProtector -RecoveryPassword
-        }
-        catch {
-
-            try {
-                throw "Bitlocker was not enabled. Manual remediation required!" 
-            }
-            catch {
-               Add-LogEntry -Type Error -Message $_.Exception.Message
-               Exit
-            }
-            
-        }  
-         
-    }
-   
-
-}
-# Gets file presence, last password in file, and count of passwords in file
-function Get-FileInfo {
-    [CmdletBinding()]
-    param (
-        [switch]$IsFilePresent,
-        [switch]$GetPassword,
-        [switch]$PasswordCount 
-    )
-
-    switch ($_) {
-        {$IsFilePresent} {(Test-Path -Path $LTSvc\BiosPW.txt)}
-        {$GetPassword} {(Get-Content $LTSvc\Biospw.txt -Tail 1).ToString()}
-        {$PasswordCount} {(Get-Content -Path $LTSvc\biospw.txt | Where-Object {$_ -ne ""} | Measure-Object -Line).Lines}
-    }
-}
-
-# TODO Finish this function
-# Update Set-BiosAdminPassword function with GenerateRandomPassword
-function Set-BiosAdminPassword {
-    [CmdletBinding()]
-    Param(
-        [switch]$GeneratePassword,
-
-        [ValidateLength(4,32)]
-        [ValidateNotNullOrEmpty()]
-        [string]$AddPassword,
-
-        [ValidateNotNullOrEmpty]
-        [string]$RemovePassword
-        
-    )
-
-    $password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content 
-    $format_password = $password -replace "\W", '_'
-    $AddPassword = Get-FileInfo -GetPassword
-
-    switch ($_) {
-        {$GeneratePassword} {($format_password | Out-File $LTSvc\BiosPW.txt -Append)}
-        {$AddPassword} {Set-Item -Path DellSmBios:\Security\AdminPassword $AddPassword -ErrorAction Stop}
-        {$RemovePassword} {(Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $RemovePassword -ErrorAction Stop)}
-    }
-}
-
-# Remove BIOS admin password
-function Remove-BiosAdminPassword {
-    Param(
-        [Parameter(Mandatory = $true)]
-        [string]$RemovePassword
-    )
     
-    Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $RemovePassword -ErrorAction Stop
+    Enable-Bitlocker @bitlocker_options
+    Add-KeyProtector -RecoveryPassword
+
 }
 
 # Add either a recovery password or TPM key protector
@@ -269,5 +192,147 @@ function Add-KeyProtector {
         Add-BitLockerKeyProtector -MountPoint "C:" -TpmProtector
     }
 
+}
+
+
+
+#############
+# SCRIPT
+#############
+
+$TPMState = Get-TPMState
+$bitlocker_status = Get-BitlockerState
+$bitlocker_settings = @{
+
+    "IsRebootPending" = $bitlocker_status.IsRebootRequired()
+    "Encrypted" = $bitlocker_status.IsVolumeEncrypted()
+    "TPMProtectorExists" = $bitlocker_status.IsTPMKeyPresent()
+    "RecoveryPasswordExists" = $bitlocker_status.IsRecoveryPassword()
+    "Protected" = $bitlocker_status.IsProtected()
+    "TPMReady" = $TPMState.CheckTPMReady()
+}
+
+Switch ($bitlocker_settings.IsRebootPending){
+    {$_ -eq $true} {
+
+        try {
+            if (($bitlocker_settings.Encrypted -eq $true) -and ($bitlocker_settings.TPMProtectorExists -eq $false) -and ($bitlocker_settings.RecoveryPasswordExists -eq $false)){
+
+                Add-KeyProtector -TPMProtector
+                Add-KeyProtector -RecoveryPassword
+                Resume-BitLocker -MountPoint "C:" 
+
+                Add-LogEntry -Type Info -Message "TPM and Recovery Password protectors have been added. Protection Status has been turned on"
+                Exit
+
+            }else{
+
+            throw "REBOOT REQUIRED before proceeding."
+
+            }
+        }
+        catch {
+            Add-LogEntry -Type Error -Message $_.Exception.Message 
+            Exit 
+        }
+        
+        
+    }
+}
+
+Add-LogEntry -Type Info -Message "Starting Bitlocker setting checks"
+
+Switch ($bitlocker_settings) {
+
+    {$_.TPMReady -eq $false } {
+        
+        Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
+    }
+
+    {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)} {
+        try {
+            Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
+
+            Set-BitlockerState
+            Resume-BitLocker -MountPoint C:
+
+            Add-LogEntry -Type Info -Message "Bitlocker is now enabled: Exiting script"
+            Exit
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+            
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+        }
+        
+    }
+    {$_.TPMProtectorExists -eq $false} {
+        try {
+            Add-LogEntry -Type Debug -Message "TPMProtector NOT found: Attempting to add TPM Protector"
+
+            Add-KeyProtector -TPMProtector
+
+            Add-LogEntry -Type Info -Message "TPM Protector has been added"
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+
+            # (0x80310031) Only one key protector of this type is allowed for this drive.
+            if (Get-ExceptionCode -contains "0x80310031") {
+                
+                Add-LogEntry -Type Debug -Message "TPM Protector already exists"
+                
+            }else {
+                Add-LogEntry -Type Error -Message $_.Exception.Message
+            }
+        }
+       
+    }
+    {$_.RecoveryPasswordExists -eq $false} {
+        
+        try {
+
+            Add-KeyProtector -RecoveryPassword
+
+            Add-LogEntry -Type Info -Message "Recovery Password has been added"
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+        }
+        
+        
+    }
+    {$_.Protected -eq $false} {
+        Add-LogEntry -Type Debug -Message "Protection is NOT enabled. Attempting to enable protection"
+        try {
+
+            Resume-BitLocker -MountPoint c: -ErrorAction Stop
+
+            Add-LogEntry -Type Info -Message "Protection has been enabled: Exiting script"
+            Exit 
+        }
+        catch [System.Runtime.InteropServices.COMException] {
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+
+             # 0x80310001: Drive not encrypted - Attempt to recover and encrypt the drive
+            if (Get-ExceptionCode -errorcode $_.Exception.Message -contains "0x80310001") {
+                
+            Set-BitlockerState
+            Add-KeyProtector -RecoveryPassword
+            Resume-BitLocker -MountPoint C:
+
+            Add-LogEntry -Type Info -Message "Bitlocker has been enabled: Exiting script"
+            Exit
+
+            }else {
+                
+                Add-LogEntry -Type Error -Message $_.Exception.Message
+            }
+        
+            
+        }
+      }
+   
+    
 }
 
