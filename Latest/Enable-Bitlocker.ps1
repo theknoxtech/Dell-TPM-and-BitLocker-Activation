@@ -402,8 +402,7 @@ function IsTPMActivated {
 }
 
 # TODO Refactor all of this to work as a function
-function Enable-TPM {
-  
+
 # Visual C++ Runtime Libraries
 Install-Redistributables
 
@@ -500,6 +499,7 @@ if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled")) {
 }
 
 # Check if TPM is enabled and activated in the BIOS then remove password
+# TODO Find or create the Get-BIOSTPMSettings function
 $CurrentPW = Get-Content -Path $LTSvc\biospw.txt
 if (((Get-BiosTPMSettings -TPMSecurityEnabled) -eq "Enabled") -and ((Get-BiosTPMSettings -TPMActivated) -eq "Enabled")) {
     
@@ -511,8 +511,10 @@ if (((Get-BiosTPMSettings -TPMSecurityEnabled) -eq "Enabled") -and ((Get-BiosTPM
         Remove-BiosAdminPassword -RemovePassword $CurrentPW
     }
     catch [System.InvalidOperationException] {
+
         # Catches Invalid Password error and checks if more than one password exists in the biospw.txt file
         Add-LogEntry -Type Error -Message $_.ErrorDetails.Message
+        
         $PWCheck = (Get-Content -Path $LTSvc\biospw.txt | Where-Object {$_ -ne ""} | Measure-Object -Line).Lines
 
         switch ($PWCheck) {
@@ -549,7 +551,7 @@ Add-LogEntry -Type "Debug" -Message "REBOOT REQUIRED: Rerun after script reboot 
 
 # REBOOT REQUIRED HERE
 
-}
+
 
 
 
@@ -719,6 +721,154 @@ Switch ($bitlocker_settings) {
    
     
 }
+
+ 
+# TODO Verify code is good below on 12/4/24
+
+# Visual C++ Runtime Libraries
+Install-Redistributables
+
+# Install DellBiosProvider
+if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
+
+    Add-LogEntry -Type Debug -Message "Installing DellBiosProvider"
+
+    try {
+        Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
+        Import-Module DellBiosProvider -Verbose
+        
+    }
+    catch {
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "There was an issue install or importing DellBiosProvider. Manual remediation required"
+        Exit 
+        
+    }
+
+    Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully!" 
+
+}
+# Set BIOS Password
+# TODO Add confirm save before setting here
+if (!(IsBIOSPasswordSet)) {
+
+    Add-LogEntry -Type Debug -Message "Setting BIOS Password"
+    try {
+       
+        Set-BiosAdminPassword -AddPassword (GenerateRandomPassword -SaveToFile) 
+        $GeneratedPW = Get-Content -Path $LTSvc\Biospw.txt
+    }
+    catch [System.ArgumentOutOfRangeException]  {
+        # TODO Add Error handling to catch and remediate a password out of range
+        # Acceptable range is 4-32 characters
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+        Exit
+    
+    }
+    Add-LogEntry -Type Info -Message "Current BIOS Password: $GeneratedPW and is saved in biospw.txt"
+    
+}elseif (IsBIOSPasswordSet) {
+    
+    Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation is required"
+    Exit
+}
+
+# Enable TPM scurity in the BIOS
+
+$bios_pw = Get-Content -Path $LTSvc\BiosPW.txt
+if (IsTPMSecurityEnabled) {
+
+    Add-LogEntry -Type Info -Message "TPM security is already enabled in the BIOS."
+
+}else {
+
+    try {
+        Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $bios_pw -ErrorAction Stop
+
+        Add-LogEntry -Type Info -Message "TPM Security has been enabled in the BIOS"
+    }
+    catch [System.Management.Automation.ItemNotFoundException]{
+
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "The option to enable TPM Security was NOT found"
+    }
+   
+}
+
+# Enable TPM Activation in the BIOS
+# TODO Revisist this and verify it works
+if ((IsTPMSecurityEnabled) -and (IsTPMActivated -eq "Disabled")) {
+
+    try {
+
+        Add-LogEntry -Type Debug -Message "Attempting to activate the TPM"
+
+        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $bios_pw -ErrorAction Stop
+
+        
+    }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        # Catches "Item Not Found" Error and writes a log
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "The option to activate the TPM was NOT found."
+    }
+
+    Add-LogEntry -Type Info -Message "TPM has been ENABLED"
+
+}
+
+# Check if TPM is enabled and activated in the BIOS then remove password
+$CurrentPW = Get-Content -Path $LTSvc\biospw.txt
+if (((Get-BiosTPMSettings -TPMSecurityEnabled) -eq "Enabled") -and ((Get-BiosTPMSettings -TPMActivated) -eq "Enabled")) {
+    
+    $biospw_validation = IsBIOSPasswordSet
+    # TODO add check for file before removing
+    try {
+        Add-LogEntry -Type Debug -Message "Attempting removal of BIOS password"
+        
+        Remove-BiosAdminPassword -RemovePassword $CurrentPW
+    }
+    catch [System.InvalidOperationException] {
+        # Catches Invalid Password error and checks if more than one password exists in the biospw.txt file
+        Add-LogEntry -Type Error -Message $_.ErrorDetails.Message
+        $PWCheck = (Get-Content -Path $LTSvc\biospw.txt | Where-Object {$_ -ne ""} | Measure-Object -Line).Lines
+
+        switch ($PWCheck) {
+            {$_ -lt 1} {Add-LogEntry -Type Debug -Message "File contains NO password entries. Manual removal and remediation will be required"; break}
+            {$_ -gt 1} {Add-LogEntry -Type Debug -Message "File contains $PWCheck password entries. Manual remediation required"; break}
+            {$_ -eq 1} {Add-LogEntry -Type Debug -Message "File contains ONE password entry, but it appears to be incorrect. Manual remediation required"; break}
+        }
+        Exit
+    }
+
+    Add-LogEntry -Type Info -Message "Has BIOS password been removed: $biospw_validation"
+}
+else {
+
+    
+}
+
+# Remove BiosPW.txt
+if (IsBIOSPasswordSet) {
+    Write-Host "Attempting to delete BiosPW.txt" -ForegroundColor Yellow
+
+    throw "Remove the BIOS password before deleting the file. Manual remediation required!"
+    Add-LogEntry -Type "Error"
+
+}
+else {
+    
+    Remove-Item -Path $LTSvc\Biospw.txt -Force
+    
+    Add-LogEntry -Type "Debug" -Message "Biospw.txt has been successfully removed!" 
+}
+
+Add-LogEntry -Type "Debug" -Message "REBOOT REQUIRED: Rerun after script reboot to finish Bitlocker setup"
+
+# REBOOT REQUIRED HERE
 
 
 
