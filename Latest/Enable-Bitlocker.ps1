@@ -54,11 +54,12 @@ function Add-LogEntry {
     $Log = "$LTSvc\enable_bitlocker.txt"
     $timestamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
     $errordetails = (Get-Error).ErrorDetails
+    $line_number = $MyInvocation.ScriptLineNumber
 
     switch ($Type) {
-        ([Logs]::Debug) {Add-Content $Log "$timestamp DEBUG: $message"; break  }
-        ([Logs]::Error) {Add-Content $Log "$timestamp ERROR: $message ERROR DETAILS: $errordetails"; break }
-        ([Logs]::Info) {Add-Content $Log "$timestamp INFO: $message"; break}
+        ([Logs]::Debug) {Add-Content $Log "Line: $line_number : $timestamp  DEBUG: $message"; break  }
+        ([Logs]::Error) {Add-Content $Log "Line: $line_number : $timestamp ERROR: $message ERROR DETAILS: $errordetails"; break }
+        ([Logs]::Info) {Add-Content $Log "Line: $line_number : $timestamp INFO: $message"; break}
         (default) {Add-Content $Log "$timestamp []: $message"} 
     }
 }
@@ -532,12 +533,13 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
-    Add-LogEntry -Type Debug -Message "Setting BIOS Password"
+        Add-LogEntry -Type Debug -Message "Is BIOS Password Set"
     try {
         Add-LogEntry -Type Debug -Message "Generating Password"
 
         Set-BiosAdminPassword -GeneratePassword
 
+        Add-LogEntry -Type Debug -Message "Setting BIOS Password"
         Set-BiosAdminPassword -AddPassword
 
         Add-LogEntry -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)"
@@ -567,6 +569,8 @@ if (IsTPMSecurityEnabled) {
 }else {
 
     try {
+        Add-LogEntry -Type Debug -Message "Attempting to enable TPM Security in the BIOS"
+
         Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $credential -ErrorAction Stop
 
         Add-LogEntry -Type Info -Message "TPM Security has been enabled in the BIOS"
