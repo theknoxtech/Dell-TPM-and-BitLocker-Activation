@@ -340,6 +340,21 @@ function IsTPMActivated {
     {$_ -eq "Disabled"} {$false}
    }
 }
+function Get-PathExists {
+    param(
+        [string]$Path
+    )
+
+    try {
+         Get-Item $Path -ErrorAction Stop
+         return $true
+    }
+    catch {
+         Add-LogEntry -Type Error  -Message $_.Exception.Message
+         return $false
+    }
+
+}
 
 ########################
 ### SCRIPT FUNCTIONS ###
@@ -630,7 +645,6 @@ if (IsTPMActivated) {
 # Check if TPM is enabled and activated in the BIOS then remove password
 if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
     
-    # TODO add check for file before removing
     try {
         Add-LogEntry -Type Debug -Message "Attempting removal of BIOS password"
 
@@ -647,6 +661,7 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
 
         # Catches Incorrect Password error and checks if more than one password exists in the biospw.txt file
         Add-LogEntry -Type Error -Message $_.ErrorDetails.Message
+
         $fileCheck = Get-PWFileInfo -PasswordCount
 
         switch ($fileCheck) {
