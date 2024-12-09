@@ -38,14 +38,14 @@ $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 <# $global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM #>
 
-# Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
-$Log = "$LTSvc\enable_bitlocker.txt"
-
-enum Logs {
-    Error
-    Debug
-    Info
+# Gets the line number of the executing command
+# Line numbers start at the beginning of the script after functions if looking at this in an IDE
+function Get-LineNumber {
+    $MyInvocation.ScriptLineNumber
 }
+
+
+# Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
 function Add-LogEntry {
     
     Param(
@@ -53,12 +53,20 @@ function Add-LogEntry {
     [Logs]$Type
     )
 
+    enum Logs {
+        Error
+        Debug
+        Info
+    }
+    $Log = "$LTSvc\enable_bitlocker.txt"
     $timestamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
+    $errordetails = (Get-Error).ErrorDetails
+    $line_number = Get-LineNumber
 
     switch ($Type) {
-        ([Logs]::Debug) {Add-Content $Log "$timestamp DEBUG: $message"; break  }
-        ([Logs]::Error) {Add-Content $Log "$timestamp ERROR: $message"; break }
-        ([Logs]::Info) {Add-Content $Log "$timestamp INFO: $message"; break}
+        ([Logs]::Debug) {Add-Content $Log "Line: $line_number : $timestamp  DEBUG: $message"; break  }
+        ([Logs]::Error) {Add-Content $Log "Line: $line_number : $timestamp ERROR: $message ERROR DETAILS: $errordetails"; break }
+        ([Logs]::Info) {Add-Content $Log "Line: $line_number : $timestamp INFO: $message"; break}
         (default) {Add-Content $Log "$timestamp []: $message"} 
     }
 }
@@ -80,6 +88,25 @@ function Get-ExceptionCode {
 
 }
 
+# BIOS verion check
+function Get-SMBiosVersion {
+    $Bios = Get-CimInstance Win32_BIOS 
+    $Version = [float]::Parse("$($bios.SMBIOSMajorVersion).$($bios.SMBIOSMinorVersion)")
+    return $Version
+}
+
+# Returns true if BIOS version does not meet minium requirements. Returns false otherwise.
+function Get-SMBiosRequiresUpgrade {
+    Param(
+        [float]$MinimumVersion = 2.4
+    )
+  
+    if ((Get-SMBiosVersion) -lt $MinimumVersion) {
+        return $true
+    }
+  
+    return $false
+}
 
 # Query TPM and return custom TPMState object <[bool]IsPresent, [bool]IsReady, [bool]IsEnabled, [function]CheckTPMReady>
 function Get-TPMState {
@@ -161,9 +188,10 @@ function Get-BitlockerState {
     return $BitlockerState
 }
 
-# Query Bitlocker and Set-BitlockerState
+# Enables Bitlocker
 function Set-BitlockerState {
-    
+   
+
     $bitlocker_options = @{
 
         MountPoint       = "C:"
@@ -173,10 +201,107 @@ function Set-BitlockerState {
         SkiphardwareTest = $true
 
     }
-    
+
     Enable-Bitlocker @bitlocker_options
     Add-KeyProtector -RecoveryPassword
+    
 
+}
+
+# Check if Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
+function Install-Redistributables {
+   
+  
+    $products = Get-CimInstance win32_product
+ 
+
+    # Visual C++ 2010 Redistributable
+  
+    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
+    
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2010 already installed"
+    }
+    
+    else {
+       
+        Add-LogEntry -Debug -Message "Installing Microsoft Visual C++ 2010"
+
+        $working_dir = $PWD
+
+        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
+        Set-Location $LTSvc
+        .\vcredist_2010_x64.exe /extract:vc2010 /q /norestart
+        Start-Sleep -Seconds 1.5
+        Set-Location $LTSvc\vc2010
+        .\Setup.exe /q | Wait-Process
+    
+        Set-Location $working_dir
+
+        Add-LogEntry -Type Info -Message "Visual C++ 2010 has been installed"
+    }
+    # Visual C++ 2022 Redistributable
+ 
+    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
+
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2022 already installed"
+
+    }
+   
+    else {
+        
+        Add-LogEntry -Type Debug -Message "Installing Visual C++ 2022"
+
+        $working_dir = $PWD
+
+        [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
+        Set-Location $LTSvc
+        .\vc_redist.x64.exe /q /norestart | Wait-Process
+    
+        Set-Location $working_dir
+
+        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2022 has been installed"
+    }
+}
+
+# Returns current password value as a [Bool]
+function IsBIOSPasswordSet {
+    return [System.Convert]::ToBoolean((Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue)
+}
+
+# Gets BIOS PW file presence, and count of passwords in file
+function Get-PWFileInfo {
+    [CmdletBinding()]
+    param (
+        [switch]$IsFilePresent,
+        [switch]$PasswordCount,
+        [switch]$RetrieveLastPassword 
+    )
+
+    switch ($_) {
+        {$IsFilePresent} {(Test-Path -Path $LTSvc\BiosPW.txt -ErrorAction Stop)}
+        {$PasswordCount} {(Get-Content -Path $LTSvc\biospw.txt | Where-Object {$_ -ne ""} | Measure-Object -Line).Lines}
+        {$RetrieveLastPassword} {(Get-Content $LTSvc\Biospw.txt -Tail 1).ToString()}
+    }
+}
+
+# Update Set-BiosAdminPassword function with GenerateRandomPassword
+function Set-BiosAdminPassword {
+    Param(
+        [switch]$GeneratePassword,
+        [switch]$AddPassword,
+        [switch]$RemovePassword
+        
+    )
+
+    $request_password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content 
+    $format_password = $request_password -replace "\W", '_'
+    $password = (Get-Content $LTSvc\Biospw.txt -Tail 1).ToString()
+
+    switch ($_) {
+        {$GeneratePassword} {($format_password | Out-File $LTSvc\BiosPW.txt -Append)}
+        {$AddPassword} {Set-Item -Path DellSmBios:\Security\AdminPassword $password -ErrorAction Stop}
+        {$RemovePassword} {(Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $password -ErrorAction Stop)}
+    }
 }
 
 # Add either a recovery password or TPM key protector
@@ -194,11 +319,62 @@ function Add-KeyProtector {
 
 }
 
+# Check if TPM Security is enabled in the BIOS - Returns True or False
+function IsTPMSecurityEnabled {
+
+   $security_enabled = (Get-Item -Path DellSmbios:\TPMSecurity\TPMSecurity).CurrentValue
+
+   switch ($security_enabled) {
+    {$_ -eq "Enabled"} {$true}
+    {$_ -eq "Disabled"} {$false}
+   }
+}
+
+# Check if TPM is Activated in the BIOS - Returns True or False
+# TODO Need to verify if this exists anymore
+function IsTPMActivated {
+    $tpm_activated = (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
+
+   switch ($tpm_activated) {
+    {$_ -eq "Enabled"} {$true}
+    {$_ -eq "Disabled"} {$false}
+   }
+}
+
+########################
+### SCRIPT FUNCTIONS ###
+########################
+
+# Check Execution Policy
+Add-LogEntry -Type Debug -Message "Checking execution policy"
+if (!(Get-ExecutionPolicy) -eq "Bypass") {
+    try {
+        Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
+    }
+    catch [System.Management.Automation.RuntimeException] {
+        # ERROR: Policy overridden by a policy defined at a more specific scope
+            Add-LogEntry -Type Error -Message $_.Exception.Message
+            Add-LogEntry -Type Error -Message $_.ErrorDetails
+    }
+}
+
+# Check BIOS Version
+# Upgrade BIOS if not up to date
+Add-LogEntry -Type Debug -Message "Checking BIOS version"
+$current_ver = Get-SMBiosVersion
+$required_ver = 2.4
+if (Get-SMBiosRequiresUpgrade) {
+   try {
+
+    throw "Current BIOS version $current_ver : Version is out of date. Update BIOS to $required_ver or later and try again"
+
+   }catch {
+
+    Add-LogEntry -Type Error -Message $_.Exception.Message
+   }
+}
 
 
-#############
-# SCRIPT
-#############
 
 $TPMState = Get-TPMState
 $bitlocker_status = Get-BitlockerState
@@ -217,12 +393,22 @@ Switch ($bitlocker_settings.IsRebootPending){
 
         try {
             if (($bitlocker_settings.Encrypted -eq $true) -and ($bitlocker_settings.TPMProtectorExists -eq $false) -and ($bitlocker_settings.RecoveryPasswordExists -eq $false)){
+                Add-LogEntry -Type Error -Message "Drive is encrypted, but protectors are missing and protection is off"
+
+                Add-LogEntry -Type Debug -Message "Adding TPM Protector"
 
                 Add-KeyProtector -TPMProtector
+
+                Add-LogEntry -Type Debug -Message "Adding Recovery Password"
+
                 Add-KeyProtector -RecoveryPassword
+
                 Resume-BitLocker -MountPoint "C:" 
 
-                Add-LogEntry -Type Info -Message "TPM and Recovery Password protectors have been added. Protection Status has been turned on"
+                Add-LogEntry -Type Info -Message "Is TPM protector present: $($bitlocker_settings.TPMProtectorExists)"
+                Add-LogEntry -Type Info -Message "Is recovery password present: $($bitlocker_settings.RecoveryPasswordExists)"
+                Add-LogEntry -Type Info -Message "Is protection enabled: $($bitlocker_settings.Protected)"
+
                 Exit
 
             }else{
@@ -241,11 +427,8 @@ Switch ($bitlocker_settings.IsRebootPending){
 }
 
 Add-LogEntry -Type Info -Message "Starting Bitlocker setting checks"
-
 Switch ($bitlocker_settings) {
-
     {$_.TPMReady -eq $false } {
-        
         Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
     }
 
@@ -288,9 +471,9 @@ Switch ($bitlocker_settings) {
        
     }
     {$_.RecoveryPasswordExists -eq $false} {
-        
+        Add-LogEntry -Type Debug -Message "Recovery Password NOT found: Attempting to add Recovery Password"
         try {
-
+            
             Add-KeyProtector -RecoveryPassword
 
             Add-LogEntry -Type Info -Message "Recovery Password has been added"
@@ -313,7 +496,6 @@ Switch ($bitlocker_settings) {
         }
         catch [System.Runtime.InteropServices.COMException] {
             Add-LogEntry -Type Error -Message $_.Exception.Message
-
              # 0x80310001: Drive not encrypted - Attempt to recover and encrypt the drive
             if (Get-ExceptionCode -errorcode $_.Exception.Message -contains "0x80310001") {
                 
@@ -335,4 +517,180 @@ Switch ($bitlocker_settings) {
    
     
 }
+
+ 
+# TODO Verify code is good below on 12/4/24
+
+# Visual C++ Runtime Libraries
+Install-Redistributables
+
+# Install DellBiosProvider
+if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
+
+    Add-LogEntry -Type Debug -Message "Installing DellBiosProvider"
+
+    try {
+        Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
+        Import-Module DellBiosProvider -Verbose
+        
+    }
+    catch {
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required"
+        Exit 
+        
+    }
+
+    Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully!" 
+
+}
+
+# Set BIOS Password
+if (!(IsBIOSPasswordSet)) {
+
+        Add-LogEntry -Type Debug -Message "Is BIOS Password Set"
+    try {
+        Add-LogEntry -Type Debug -Message "Generating Password"
+
+        Set-BiosAdminPassword -GeneratePassword
+
+        Add-LogEntry -Type Debug -Message "Setting BIOS Password"
+
+        Set-BiosAdminPassword -AddPassword
+
+        Add-LogEntry -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)"
+
+    }
+    catch [System.Management.Automation.PSSecurityException]  {
+        # If this is caught then a password was previously set
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+        Exit
+    
+    }
+    
+    
+}elseif (IsBIOSPasswordSet) {
+    
+    Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation is required"
+    Exit
+}
+
+# Enable TPM scurity in the BIOS
+
+$credential = Get-PWFileInfo -RetrieveLastPassword
+if (IsTPMSecurityEnabled) {
+
+    Add-LogEntry -Type Info -Message "TPM security is already enabled in the BIOS."
+
+}else {
+
+    try {
+        Add-LogEntry -Type Debug -Message "Attempting to enable TPM Security in the BIOS"
+
+        Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $credential -ErrorAction Stop
+
+        Add-LogEntry -Type Info -Message "TPM Security has been enabled in the BIOS"
+    }
+    catch [System.Management.Automation.ItemNotFoundException]{
+
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "The option to enable TPM Security was NOT found"
+    }
+   
+}
+
+# Enable TPM Activation in the BIOS
+# TODO Revisist this and verify it works
+if (IsTPMActivated) {
+
+    Add-LogEntry -Type Info -Message "TPM is already activated in the BIOS"
+
+}else {
+    try {
+
+        Add-LogEntry -Type Debug -Message "Attempting to activate the TPM"
+
+        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop
+
+        
+    }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        # Catches "Item Not Found" Error and writes a log
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+        Add-LogEntry -Type Debug -Message "The option to activate the TPM was NOT found."
+    }
+
+    Add-LogEntry -Type Info -Message "TPM has been ENABLED"
+}
+
+# TODO  Add check for IsTPMActivated and handle if it is not available
+# Check if TPM is enabled and activated in the BIOS then remove password
+if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
+    
+    # TODO add check for file before removing
+    try {
+        Add-LogEntry -Type Debug -Message "Attempting removal of BIOS password"
+
+        Get-PWFileInfo -IsFilePresent
+
+        Set-BiosAdminPassword -RemovePassword
+    }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        # Catches an error for the biospw.txt file missing
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+    }
+    catch [System.InvalidOperationException] {
+
+        # Catches Incorrect Password error and checks if more than one password exists in the biospw.txt file
+        Add-LogEntry -Type Error -Message $_.ErrorDetails.Message
+        $fileCheck = Get-PWFileInfo -PasswordCount
+
+        switch ($fileCheck) {
+            {$_ -lt 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entries. Manual removal and remediation will be required"; break}
+            {$_ -gt 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entries. Manual remediation required"; break}
+            {$_ -eq 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required"; break}
+        }
+        Exit
+    }
+    catch [System.ArgumentOutOfRangeException] {
+        # Catches password out range or not set error
+        Add-LogEntry -Type Error -Message "$($_.Exception.Message) This can mean the password is not set at all"
+        
+    }
+
+    Add-LogEntry -Type Info -Message "Is BIOS password set: $(IsBIOSPasswordSet)"
+}
+else {
+
+    
+}
+
+# Remove BiosPW.txt
+if (IsBIOSPasswordSet) {
+   try {
+        throw "Remove the BIOS password before deleting the file. Manual remediation required!"
+   }
+   catch {
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+
+   }
+}else {
+    Add-LogEntry -Type Debug -Message "Removing password file"
+
+    Remove-Item -Path $LTSvc\Biospw.txt -Force
+    
+    Add-LogEntry -Type Info -Message "Password file has been successfully removed!" 
+}
+
+Add-LogEntry -Type Debug -Message "REBOOT REQUIRED: Rerun after script reboot to finish Bitlocker setup"
+
+# REBOOT REQUIRED HERE
+
+
+
+
 
