@@ -271,7 +271,7 @@ function IsBIOSPasswordSet {
 
 # Gets BIOS PW file presence, and count of passwords in file
 function Get-PWFileInfo {
-    [CmdletBinding()]
+    
     param (
         [switch]$IsFilePresent,
         [switch]$PasswordCount,
@@ -357,15 +357,18 @@ function Get-PathExists {
 
 }
 
-# TODO Get this to work
-function Get-ExitScript {
+# Used to exit the script with a logged message
+function Stop-Script {
     param(
-        [switch]$Terminate
+        [string]$ExitMessage
+
     )
 
-    if ($Terminate) {
-        
-        Get-Process -Name powershell.exe | Where-Object {$_.Path -like $LTSvc} | Stop-Process -Force
+    try {
+        Add-LogEntry -Type Info -Message "Script halted with message: $ExitMessage"
+    }
+    finally {
+        throw
     }
 
 }
@@ -374,7 +377,7 @@ function Get-ExitScript {
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
-Get-ExitScript
+
 # Check Execution Policy
 Add-LogEntry -Type Debug -Message "Checking execution policy"
 if (!(Get-ExecutionPolicy) -eq "Bypass") {
@@ -417,53 +420,76 @@ $bitlocker_settings = @{
     "Protected" = $bitlocker_status.IsProtected()
     "TPMReady" = $TPMState.CheckTPMReady()
 }
+# Switch checks if a reboot is pending and takes actions based on the result
+Switch ($bitlocker_settings){
 
+    # Actions taken if a reboot is PENDING
+    {$_.IsRebootPending -eq $true} {
 
-
-
-# This switch is a mitigation for a known Immybot issue
-Switch ($bitlocker_settings.IsRebootPending){
-    {$_ -eq $true} {
-
+        Add-LogEntry -Type Info -Message "Pending reboot found, checking current Bitlocker state"
         try {
 
-            if (($bitlocker_settings.Encrypted -eq $true) -and ($bitlocker_settings.TPMProtectorExists -eq $false) -and ($bitlocker_settings.RecoveryPasswordExists -eq $false)){
-                Add-LogEntry -Type Error -Message "Drive is encrypted, but protectors are missing and protection is off"
-
+            switch ($bitlocker_settings) {
+            {$_.Encrypted}{
+                Add-LogEntry -Type Debug -Message "Drive is encrypted but, MISSING key protectors are missing and protection is off"
+            }
+            {$_.TPMProtectorExists -eq $false}{
                 Add-LogEntry -Type Debug -Message "Adding TPM Protector"
-
                 Add-KeyProtector -TPMProtector
-
+                
+            }
+            {$_.RecoveryPasswordExists -eq $false}{
                 Add-LogEntry -Type Debug -Message "Adding Recovery Password"
-
                 Add-KeyProtector -RecoveryPassword
-
-                Resume-BitLocker -MountPoint "C:" 
-
-                Add-LogEntry -Type Info -Message "Is TPM protector present: $($bitlocker_settings.TPMProtectorExists)"
-                Add-LogEntry -Type Info -Message "Is recovery password present: $($bitlocker_settings.RecoveryPasswordExists)"
-                Add-LogEntry -Type Info -Message "Is protection enabled: $($bitlocker_settings.Protected)"
-
-                # TODO verify this works
-                Get-ExitScript -Terminate
-
-            }else{
-
-                throw "REBOOT REQUIRED before proceeding."
-            
+               
+            }
+            {$_.Protected -eq $false}{
+                Add-LogEntry -Type Debug -Message "Enabling Protection"
+                Resume-BitLocker -MountPoint "C:"
+                
             }
         }
-        catch {
-            Add-LogEntry -Type Error -Message $_.Exception.Message 
+        Add-LogEntry -Type Debug -Message "REBOOT REQUIRED: Key protectors and Protection Status updated successfully"
+        Stop-Script -ExitMessage "Operation complete Bitlocker is enabled"
+
+
+    }catch [System.Runtime.InteropServices.COMException] {
+        Add-LogEntry -Type Error -Message $_.Exception.Message
+        Stop-Script -ExitMessage "REBOOT REQUIRED before proceeding with updating Bitlocker settings"
+    }
+}
+    # Actions if reboot is NOT pending
+    {$_.IsRebootPending -eq $false}{
+
+        Add-LogEntry -Type Info -Message "No pending reboot detected"
+        Switch ($bitlocker_settings) {
+
+            {$_.TPMReady -eq $false} {Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break}
+            {($_.Encrypted -eq $false) -and ($_.TpmReady -eq $true)} {
+                try {
+                    Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
+
+                    Set-BitlockerState
+                
+                    Add-LogEntry -Type Info -Message "Bitlocker is now enabled, protection status will change to ON once fully encrypted."
+                    
+                    Stop-Script -ExitMessage "Operation complete exiting script"
+                }
+                catch  [System.Runtime.InteropServices.COMException] {
+                    Add-LogEntry -Type Error -Message $_.Exception.Message
+                    Stop-Script -ExitMessage "There was an issue enabling Bitlocker. Manual remediation required"
+                }
+               
+            }
             
-            
+           
         }
-        
-        
+
     }
 }
 
-Add-LogEntry -Type Info -Message "Starting Bitlocker setting checks" 
+<# Add-LogEntry -Type Info -Message "Starting TPM and Bitlocker checks"
+# Check for TPM enabled and take action based on result
 Switch ($bitlocker_settings) {
     {$_.TPMReady -eq $false } {
         Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
@@ -473,16 +499,14 @@ Switch ($bitlocker_settings) {
             Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
 
             Set-BitlockerState
-            Resume-BitLocker -MountPoint C:
-
-            Add-LogEntry -Type Info -Message "Bitlocker is now enabled: Exiting script"
-            # TODO verify this works
-            Get-ExitScript -Terminate
+        
+            Add-LogEntry -Type Info -Message "Bitlocker is now enabled, protection status will change to ON once fully encrypted."
             
+            Stop-Script -ExitMessage "Operation complete: Exiting script"
         }
         catch [System.Runtime.InteropServices.COMException] {
-            
             Add-LogEntry -Type Error -Message $_.Exception.Message
+            Stop-Script -ExitMessage "There was an issue enabling Bitlocker. Manual remediation required"
         }
         
     }
@@ -531,9 +555,7 @@ Switch ($bitlocker_settings) {
             Resume-BitLocker -MountPoint c: -ErrorAction Stop
 
             Add-LogEntry -Type Info -Message "Protection has been enabled: Exiting script"
-            
-            Get-ExitScript
-            
+             
         }
         catch [System.Runtime.InteropServices.COMException] {
             Add-LogEntry -Type Error -Message $_.Exception.Message
@@ -548,13 +570,14 @@ Switch ($bitlocker_settings) {
 
             Add-LogEntry -Type Info -Message "Bitlocker has been enabled: Exiting script"
 
-            }else {
+            }
+            else{
                     Add-LogEntry -Type Error -Message $_.Exception.Message
                 }    
         }
       ; break} 
 }
-
+ #>
 # Visual C++ Runtime Libraries
 Install-Redistributables
 
@@ -600,7 +623,7 @@ if (!(IsBIOSPasswordSet)) {
         # If this is caught then a password was previously set
         Add-LogEntry -Type Error -Message $_.Exception.Message
         
-        Get-ExitScript -Terminate
+        Stop-Script
     
     }
     
@@ -609,7 +632,7 @@ if (!(IsBIOSPasswordSet)) {
     
     Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation is required"
     
-    Get-ExitScript -Terminate
+    Stop-Script
 }
 
 # Enable TPM scurity in the BIOS
