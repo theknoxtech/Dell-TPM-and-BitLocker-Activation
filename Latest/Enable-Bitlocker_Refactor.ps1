@@ -360,18 +360,28 @@ function Get-PathExists {
 # Used to exit the script with a logged message
 function Stop-Script {
     param(
-        [string]$ExitMessage
-
+        [string]$ExitMessage,
+        [switch]$ExitScript
     )
 
-    try {
-        Add-LogEntry -Type Info -Message "Script halted with message: $ExitMessage"
-    }
-    finally {
-        throw
+    Switch ($_) {
+        {$ExitMessage}{
+        try {
+            Add-LogEntry -Type Info -Message "Script halted with message: $ExitMessage"
+        }
+        finally {
+            throw
+        }
+    }       
+        {$ExitScript}{
+            throw
+        }
     }
 
+  
 }
+
+
 
 
 ########################
@@ -488,96 +498,6 @@ Switch ($bitlocker_settings){
     }
 }
 
-<# Add-LogEntry -Type Info -Message "Starting TPM and Bitlocker checks"
-# Check for TPM enabled and take action based on result
-Switch ($bitlocker_settings) {
-    {$_.TPMReady -eq $false } {
-        Add-LogEntry -Type Debug -Message "TPM NOT Ready: Attempting to enable"; break
-    }
-    {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)} {
-        try {
-            Add-LogEntry -Type Debug -Message "Drive Unencrypted and TPM Ready: Attempting to enable Bitlocker"
-
-            Set-BitlockerState
-        
-            Add-LogEntry -Type Info -Message "Bitlocker is now enabled, protection status will change to ON once fully encrypted."
-            
-            Stop-Script -ExitMessage "Operation complete: Exiting script"
-        }
-        catch [System.Runtime.InteropServices.COMException] {
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-            Stop-Script -ExitMessage "There was an issue enabling Bitlocker. Manual remediation required"
-        }
-        
-    }
-    {$_.TPMProtectorExists -eq $false} {
-        try {
-            Add-LogEntry -Type Debug -Message "TPMProtector NOT found: Attempting to add TPM Protector"
-
-            Add-KeyProtector -TPMProtector
-
-            Add-LogEntry -Type Info -Message "TPM Protector has been added"
-        }
-        catch [System.Runtime.InteropServices.COMException] {
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-
-            # (0x80310031) Only one key protector of this type is allowed for this drive.
-            if (Get-ExceptionCode -contains "0x80310031") {
-                
-                Add-LogEntry -Type Debug -Message "TPM Protector already exists"
-                
-            }else {
-                Add-LogEntry -Type Error -Message $_.Exception.Message
-            }
-        }
-       
-    }
-    {$_.RecoveryPasswordExists -eq $false} {
-        Add-LogEntry -Type Debug -Message "Recovery Password NOT found: Attempting to add Recovery Password"
-        try {
-            
-            Add-KeyProtector -RecoveryPassword
-
-            Add-LogEntry -Type Info -Message "Recovery Password has been added"
-        }
-        catch [System.Runtime.InteropServices.COMException] {
-
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-        }
-        
-        
-    }
-    {$_.Protected -eq $false} {
-        Add-LogEntry -Type Debug -Message "Protection is NOT enabled. Attempting to enable protection"
-
-        try {
-
-            Resume-BitLocker -MountPoint c: -ErrorAction Stop
-
-            Add-LogEntry -Type Info -Message "Protection has been enabled: Exiting script"
-             
-        }
-        catch [System.Runtime.InteropServices.COMException] {
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-
-             # 0x80310001: Drive not encrypted - Attempt to recover and encrypt the drive
-            if (Get-ExceptionCode -errorcode $_.Exception.Message -contains "0x80310001") {
-            
-                
-            Set-BitlockerState
-            Add-KeyProtector -RecoveryPassword
-            Resume-BitLocker -MountPoint C:
-
-            Add-LogEntry -Type Info -Message "Bitlocker has been enabled: Exiting script"
-
-            }
-            else{
-                    Add-LogEntry -Type Error -Message $_.Exception.Message
-                }    
-        }
-      ; break} 
-}
- #>
 # Visual C++ Runtime Libraries
 Install-Redistributables
 
@@ -623,7 +543,7 @@ if (!(IsBIOSPasswordSet)) {
         # If this is caught then a password was previously set
         Add-LogEntry -Type Error -Message $_.Exception.Message
         
-        Stop-Script
+        Stop-Script -ExitMessage "FAILED to set password, a previous password has been set"
     
     }
     
@@ -632,7 +552,7 @@ if (!(IsBIOSPasswordSet)) {
     
     Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation is required"
     
-    Stop-Script
+    Stop-Script -ExitScript
 }
 
 # Enable TPM scurity in the BIOS
@@ -670,9 +590,7 @@ if (IsTPMActivated) {
 
         Add-LogEntry -Type Debug -Message "Attempting to activate the TPM"
 
-        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop
-
-        
+        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop    
     }
     catch [System.Management.Automation.ItemNotFoundException] {
         # Catches "Item Not Found" Error and writes a log
@@ -692,6 +610,8 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
 
         Get-PWFileInfo -IsFilePresent
 
+        Add-LogEntry -Type Info -Message "Password file found: $(Get-PWFileInfo -IsFilePresent)"
+
         Set-BiosAdminPassword -RemovePassword
     }
     catch [System.Management.Automation.ItemNotFoundException] {
@@ -710,7 +630,8 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
             {$_ -gt 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entries. Manual remediation required"; break}
             {$_ -eq 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required"; break}
         }
-        Exit
+        Stop-Script -ExitScript
+        
     }
     catch [System.ArgumentOutOfRangeException] {
         # Catches password out range or not set error
@@ -718,17 +639,13 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
         
     }
 
-    Add-LogEntry -Type Info -Message "Is BIOS password set: $(IsBIOSPasswordSet)"
-}
-else {
-
-    
+    Add-LogEntry -Type Info -Message "Is BIOS password removed: $(IsBIOSPasswordSet)"
 }
 
 # Remove BiosPW.txt
 if (IsBIOSPasswordSet) {
    try {
-        throw "Remove the BIOS password before deleting the file. Manual remediation required!"
+        Stop-Script -ExitMessage "Remove the BIOS password before deleting the file. Manual remediation required!"
    }
    catch {
         Add-LogEntry -Type Error -Message $_.Exception.Message
