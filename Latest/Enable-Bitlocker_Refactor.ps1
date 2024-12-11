@@ -36,15 +36,13 @@ None.
 # Global Variables
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
-<# $global:TPMStatus = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftTPM' -Class Win32_TPM #>
+
 
 # Gets the line number of the executing command
 function Get-LineNumber {
     $callstack = Get-PSCallStack
     return $callstack[$callstack.count -2].Position.StartLineNumber
-
 }
-
 
 # Creates a log entry in LTSvc\Packages\enable_bitlocker.txt
 function Add-LogEntry {
@@ -74,11 +72,9 @@ function Add-LogEntry {
 
 # Convert exception to string, match for Hresult code and return it
 function Get-ExceptionCode {
-
     param (
         [String]$errorcode
     )
-    
     $regex = "\((0x[0-9A-Fa-f]+)\)"
 
     if ($errorcode.ToString() -match $regex) {
@@ -86,7 +82,6 @@ function Get-ExceptionCode {
         $code = $Matches[1]
         return $code
     }
-
 }
 
 # BIOS verion check
@@ -101,11 +96,11 @@ function Get-SMBiosRequiresUpgrade {
     Param(
         [float]$MinimumVersion = 2.4
     )
-  
+
     if ((Get-SMBiosVersion) -lt $MinimumVersion) {
         return $true
     }
-  
+
     return $false
 }
 
@@ -192,7 +187,6 @@ function Get-BitlockerState {
 # Enables Bitlocker
 function Set-BitlockerState {
    
-
     $bitlocker_options = @{
 
         MountPoint       = "C:"
@@ -205,16 +199,12 @@ function Set-BitlockerState {
 
     Enable-Bitlocker @bitlocker_options
     Add-KeyProtector -RecoveryPassword
-    
-
 }
 
 # Check if Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
 function Install-Redistributables {
    
-  
     $products = Get-CimInstance win32_product
- 
 
     # Visual C++ 2010 Redistributable
   
@@ -245,7 +235,6 @@ function Install-Redistributables {
     if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2022*" })) {
 
         Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2022 already installed"
-
     }
    
     else {
@@ -299,9 +288,9 @@ function Set-BiosAdminPassword {
     $password = (Get-Content $LTSvc\Biospw.txt -Tail 1).ToString()
 
     switch ($_) {
-        {$GeneratePassword} {($format_password | Out-File $LTSvc\BiosPW.txt -Append)}
+        {$GeneratePassword} {$format_password | Out-File $LTSvc\BiosPW.txt -Append}
         {$AddPassword} {Set-Item -Path DellSmBios:\Security\AdminPassword $password -ErrorAction Stop}
-        {$RemovePassword} {(Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $password -ErrorAction Stop)}
+        {$RemovePassword} {Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $password -ErrorAction Stop}
     }
 }
 
@@ -332,7 +321,6 @@ function IsTPMSecurityEnabled {
 }
 
 # Check if TPM is Activated in the BIOS - Returns True or False
-
 function IsTPMActivated {
     $tpm_activated = (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
 
@@ -340,21 +328,6 @@ function IsTPMActivated {
     {$_ -eq "Enabled"} {$true}
     {$_ -eq "Disabled"} {$false}
    }
-}
-function Get-PathExists {
-    param(
-        [string]$Path
-    )
-
-    try {
-         Get-Item $Path -ErrorAction Stop
-         return $true
-    }
-    catch {
-         Add-LogEntry -Type Error  -Message $_.Exception.Message
-         return $false
-    }
-
 }
 
 # Used to exit the script with a logged message
@@ -365,15 +338,17 @@ function Stop-Script {
     )
 
     Switch ($_) {
-        {$ExitMessage}{
-        try {
+        {$ExitMessage}
+        {
+            try {
             Add-LogEntry -Type Info -Message "Script halted with message: $ExitMessage"
-        }
-        finally {
-            throw
-        }
-    }       
-        {$ExitScript}{
+            }
+            finally {
+                throw
+            }
+        }       
+        {$ExitScript}
+        {
             throw
         }
     }
@@ -417,8 +392,6 @@ if (Get-SMBiosRequiresUpgrade) {
    }
 }
 
-
-
 $TPMState = Get-TPMState
 $bitlocker_status = Get-BitlockerState
 $bitlocker_settings = @{
@@ -455,13 +428,11 @@ Switch ($bitlocker_settings){
             }
             {$_.Protected -eq $false}{
                 Add-LogEntry -Type Debug -Message "Enabling Protection"
-                Resume-BitLocker -MountPoint "C:"
-                
+                Resume-BitLocker -MountPoint "C:"                
             }
         }
         Add-LogEntry -Type Debug -Message "REBOOT REQUIRED: Key protectors and Protection Status updated successfully"
         Stop-Script -ExitMessage "Operation complete Bitlocker is enabled"
-
 
     }catch [System.Runtime.InteropServices.COMException] {
         Add-LogEntry -Type Error -Message $_.Exception.Message
@@ -515,7 +486,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
         Add-LogEntry -Type Error -Message $_.Exception.Message
 
         Add-LogEntry -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required"
-        Exit 
+        Stop-Script -ExitScript 
         
     }
 
@@ -556,7 +527,6 @@ if (!(IsBIOSPasswordSet)) {
 }
 
 # Enable TPM scurity in the BIOS
-
 $credential = Get-PWFileInfo -RetrieveLastPassword
 if (IsTPMSecurityEnabled) {
 
