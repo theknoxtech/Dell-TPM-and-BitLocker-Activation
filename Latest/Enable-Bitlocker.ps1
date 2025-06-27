@@ -370,6 +370,43 @@ function Get-DellBiosProviderVersion {
 
 }
 
+# TODO Verify function
+# Installs, Uninstalls, or Upgrades DellBiosProvider
+function Install-DellBiosProvider {
+
+    Param (
+        [switch]$Install,
+        [switch]$Uninstall,
+        [switch]$Upgrade
+    )
+
+    $ModuleVersion = (Get-Module -ListAvailable -Name DellBIOSProvider).version
+
+    $ModuleOptions = @{
+        "Install" = Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force
+
+        "Upgrade" = Update-Module -Name DellBiosProvider -RequiredVersion "2.7.2" -Force
+
+        "Uninstall" = Uninstall-Module -Name DellBIOSProvider -RequiredVersion $ModuleVersion -Force
+    }
+
+    if ($Install) {
+
+        $ModuleOptions.Install
+
+    }elseif ($Upgrade) {
+
+        $ModuleOptions.Upgrade
+
+    }elseif ($Uninstall) {
+
+        $ModuleOptions.Uninstall
+    }
+
+
+    return
+}
+
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
