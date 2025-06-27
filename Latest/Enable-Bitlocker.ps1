@@ -407,6 +407,40 @@ function Install-DellBiosProvider {
     return
 }
 
+# TODO Verify function
+# Returns [bool] true or false if NuGet is installed and if a compatible version. Returns [string] if NuGet not installed
+function Get-NugetPackageProviderVersion {
+    param(
+        [switch]$InstallCheck
+    )
+
+        $IsInstalled = Get-PackageProvider -ListAvailable -Name Nuget -ErrorAction SilentlyContinue
+        $ProviderVersion = (Get-PackageProvider -ListAvailable -Name Nuget ).version
+
+    
+    $MinVersion = [version]::new("2.8.5.201")
+
+    if ($InstallCheck) {
+
+        if ($IsInstalled -and ($ProviderVersion -ge $MinVersion)) {
+
+        # Return true if compatible version installed
+            Return $true
+        
+        }elseif ($IsInstalled -and ($ProviderVersion -lt $MinVersion)) {
+            
+        # Return false  if incompatible version installed
+            return $false
+
+        }elseif ($null -eq $IsInstalled) {
+
+            return "Nuget Not Installed"
+        }
+
+        return
+    }
+
+}
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
