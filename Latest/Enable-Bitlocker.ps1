@@ -245,6 +245,7 @@ function IsBIOSPasswordSet {
     return [System.Convert]::ToBoolean((Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue)
 }
 
+# TODO Separate into individual functions
 # Gets BiosPW.txt file presence and count of passwords in file
 function Get-PWFileInfo {
     
@@ -261,6 +262,7 @@ function Get-PWFileInfo {
     }
 }
 
+# TODO Separate into individual functions
 # Update Set-BiosAdminPassword function with GenerateRandomPassword
 function Set-BiosAdminPassword {
     Param(
@@ -448,22 +450,22 @@ function Install-NugetPackageProvider {
 ########################
 
 # Check Execution Policy
-Add-LogEntry -Type Debug -Message "Checking execution policy."
+New-BitlockerLog -Type Debug -Message "Checking execution policy."
 if (!(Get-ExecutionPolicy) -eq "Bypass") {
     try {
         Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
     }
     catch [System.Management.Automation.RuntimeException] {
         # ERROR: Policy overridden by a policy defined at a more specific scope
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-            Add-LogEntry -Type Error -Message $_.ErrorDetails
+            New-BitlockerLog -Type Error -Message $_.Exception.Message
+            New-BitlockerLog -Type Error -Message $_.ErrorDetails
     }
 
 }
 
 # Check BIOS Version
 # Upgrade BIOS if not up to date
-Add-LogEntry -Type Debug -Message "Checking BIOS version."
+New-BitlockerLog -Type Debug -Message "Checking BIOS version."
 $current_ver = Get-SMBiosVersion
 $required_ver = 2.4
 if (Get-SMBiosRequiresUpgrade) {
@@ -473,7 +475,7 @@ if (Get-SMBiosRequiresUpgrade) {
 
    }catch {
 
-    Add-LogEntry -Type Error -Message $_.Exception.Message
+    New-BitlockerLog -Type Error -Message $_.Exception.Message
    }
 }
 
@@ -500,25 +502,25 @@ Switch ($bitlocker_settings){
             switch ($bitlocker_settings) {
 
                 {$_.TPMProtectorExists -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Adding TPM Protector."
+                    New-BitlockerLog -Type Debug -Message "Adding TPM Protector."
                     Add-KeyProtector -TPMProtector
                     
                 }
                 {$_.RecoveryPasswordExists -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Adding Recovery Password."
+                    New-BitlockerLog -Type Debug -Message "Adding Recovery Password."
                     Add-KeyProtector -RecoveryPassword      
                 }
                 {$_.Protected -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Enabling Protection."
+                    New-BitlockerLog -Type Debug -Message "Enabling Protection."
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
-            Add-LogEntry -Type Info -Message "Bitlocker is now enabled"
+            New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
             Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-            Add-LogEntry -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
+            New-BitlockerLog -Type Error -Message $_.Exception.Message
+            New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
             Exit
         }
 
@@ -526,37 +528,37 @@ Switch ($bitlocker_settings){
     }
     {$_.TPMReady -eq $false} {
         Write-Host "TPM not ready. Attempting to enable TPM."
-        Add-LogEntry -Type Debug -Message "TPM not ready. Attempting to enable."; break}
+        New-BitlockerLog -Type Debug -Message "TPM not ready. Attempting to enable."; break}
     
     # This statment is to mitigate an instance of the drive being fully encrypted, with no key protectors and protection status off
     # It is similar to the first statement, but is for separate bugs    
     {$_.Encrypted}{
         Write-host "Drive is encrypted. Continuing checks"
 
-        Add-LogEntry -Type Debug -Message "Drive is encrypted continuing checks."
+        New-BitlockerLog -Type Debug -Message "Drive is encrypted continuing checks."
         try {
             switch ($bitlocker_settings) {
 
                 {$_.TPMProtectorExists -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Adding TPM Protector."
+                    New-BitlockerLog -Type Debug -Message "Adding TPM Protector."
                     Add-KeyProtector -TPMProtector
                     
                 }
                 {$_.RecoveryPasswordExists -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Adding Recovery Password."
+                    New-BitlockerLog -Type Debug -Message "Adding Recovery Password."
                     Add-KeyProtector -RecoveryPassword      
                 }
                 {$_.Protected -eq $false}{
-                    Add-LogEntry -Type Debug -Message "Enabling Protection."
+                    New-BitlockerLog -Type Debug -Message "Enabling Protection."
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
-            Add-LogEntry -Type Info -Message "Bitlocker is now enabled"
+            New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
             Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-            Add-LogEntry -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
+            New-BitlockerLog -Type Error -Message $_.Exception.Message
+            New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
             Exit
         }
       
@@ -566,15 +568,15 @@ Switch ($bitlocker_settings){
     {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)}{
         Write-Host "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
 
-        Add-LogEntry -Type Debug -Message "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
+        New-BitlockerLog -Type Debug -Message "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
         try {
             Set-BitlockerState
-            Add-LogEntry -Type Info -Message "Bitlocker is enabled. Protection status will change to ON once fully encrypted."
+            New-BitlockerLog -Type Info -Message "Bitlocker is enabled. Protection status will change to ON once fully encrypted."
             Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
-            Add-LogEntry -Type Error -Message $_.Exception.Message
-            Add-LogEntry -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
+            New-BitlockerLog -Type Error -Message $_.Exception.Message
+            New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
             Exit
         }
 
@@ -649,7 +651,7 @@ if (!($bitlocker_settings.TPMReady)) {
 <# # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
-    Add-LogEntry -Type Debug -Message "Installing DellBiosProvider."
+    New-BitlockerLog -Type Debug -Message "Installing DellBiosProvider."
 
     try {
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
@@ -657,14 +659,14 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
         
     }
     catch {
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        Add-LogEntry -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
+        New-BitlockerLog -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
         Exit 
         
     }
 
-    Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully." 
+    New-BitlockerLog -Type Info -Message "DellBiosProvider installed successfully." 
 
 } #>
 
@@ -672,23 +674,23 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
-        Add-LogEntry -Type Debug -Message "Attempting to set password."
-        Add-LogEntry -Type Debug -Message "Generating Password."
+        New-BitlockerLog -Type Debug -Message "Attempting to set password."
+        New-BitlockerLog -Type Debug -Message "Generating Password."
         Set-BiosAdminPassword -GeneratePassword
 
     try {
-        Add-LogEntry -Type Debug -Message "Setting BIOS Password."
+        New-BitlockerLog -Type Debug -Message "Setting BIOS Password."
 
         Set-BiosAdminPassword -AddPassword
 
-        Add-LogEntry -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
+        New-BitlockerLog -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
 
     }
     catch [System.Management.Automation.PSSecurityException]  {
         # If this is caught then a password was previously set
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
         
-        Add-LogEntry -Type Debug -Message "Failed to set password. A previous password has been set."
+        New-BitlockerLog -Type Debug -Message "Failed to set password. A previous password has been set."
         Exit
     
     }
@@ -696,7 +698,7 @@ if (!(IsBIOSPasswordSet)) {
     
 }elseif (IsBIOSPasswordSet) {
     
-    Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
+    New-BitlockerLog -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
     
     Exit
 }
@@ -705,22 +707,22 @@ if (!(IsBIOSPasswordSet)) {
 $credential = Get-PWFileInfo -RetrieveLastPassword
 if (IsTPMSecurityEnabled) {
 
-    Add-LogEntry -Type Info -Message "TPM security is already enabled in the BIOS."
+    New-BitlockerLog -Type Info -Message "TPM security is already enabled in the BIOS."
 
 }else {
 
     try {
-        Add-LogEntry -Type Debug -Message "Attempting to enable TPM Security in the BIOS."
+        New-BitlockerLog -Type Debug -Message "Attempting to enable TPM Security in the BIOS."
 
         Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $credential -ErrorAction Stop
 
-        Add-LogEntry -Type Info -Message "TPM Security has been enabled in the BIOS."
+        New-BitlockerLog -Type Info -Message "TPM Security has been enabled in the BIOS."
     }
     catch [System.Management.Automation.ItemNotFoundException]{
 
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        Add-LogEntry -Type Debug -Message "The option to enable TPM Security was not found."
+        New-BitlockerLog -Type Debug -Message "The option to enable TPM Security was not found."
     }
    
 }
@@ -728,80 +730,80 @@ if (IsTPMSecurityEnabled) {
 # Enable TPM Activation in the BIOS
 if (IsTPMActivated) {
 
-    Add-LogEntry -Type Info -Message "TPM is already activated in the BIOS."
+    New-BitlockerLog -Type Info -Message "TPM is already activated in the BIOS."
 
 }else {
     try {
 
-        Add-LogEntry -Type Debug -Message "Attempting to activate the TPM."
+        New-BitlockerLog -Type Debug -Message "Attempting to activate the TPM."
 
         Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop    
     }
     catch [System.Management.Automation.ItemNotFoundException] {
         # Catches "Item Not Found" Error and writes a log
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        Add-LogEntry -Type Debug -Message "The option to activate the TPM was not found."
+        New-BitlockerLog -Type Debug -Message "The option to activate the TPM was not found."
     }
 
-    Add-LogEntry -Type Info -Message "TPM has been enabled."
+    New-BitlockerLog -Type Info -Message "TPM has been enabled."
 }
 
 # Check if TPM is enabled and activated in the BIOS then remove password
 if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
     
     try {
-        Add-LogEntry -Type Debug -Message "Attempting removal of BIOS password."
+        New-BitlockerLog -Type Debug -Message "Attempting removal of BIOS password."
 
         Get-PWFileInfo -IsFilePresent
 
-        Add-LogEntry -Type Info -Message "Password file found: $(Get-PWFileInfo -IsFilePresent)."
+        New-BitlockerLog -Type Info -Message "Password file found: $(Get-PWFileInfo -IsFilePresent)."
 
         Set-BiosAdminPassword -RemovePassword
     }
     catch [System.Management.Automation.ItemNotFoundException] {
         # Catches an error for the biospw.txt file missing
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
 
     }
     catch [System.InvalidOperationException] {
 
         # Catches Incorrect Password error and checks if more than one password exists in the biospw.txt file
-        Add-LogEntry -Type Error -Message $_.ErrorDetails.Message
+        New-BitlockerLog -Type Error -Message $_.ErrorDetails.Message
         $fileCheck = Get-PWFileInfo -PasswordCount
 
         switch ($fileCheck) {
-            {$_ -lt 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entries. Manual removal and remediation required!"; break}
-            {$_ -gt 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entries. Manual remediation required!"; break}
-            {$_ -eq 1} {Add-LogEntry -Type Debug -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
+            {$_ -lt 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entries. Manual removal and remediation required!"; break}
+            {$_ -gt 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entries. Manual remediation required!"; break}
+            {$_ -eq 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
         }
         Exit
         
     }
     catch [System.ArgumentOutOfRangeException] {
         # Catches password out range or not set error
-        Add-LogEntry -Type Error -Message "$($_.Exception.Message) This can mean the password is not set at all."
+        New-BitlockerLog -Type Error -Message "$($_.Exception.Message) This can mean the password is not set at all."
         
     }
 
-    Add-LogEntry -Type Info -Message "Is BIOS password set: $(IsBIOSPasswordSet)"
+    New-BitlockerLog -Type Info -Message "Is BIOS password set: $(IsBIOSPasswordSet)"
 }
 
 # Remove BiosPW.txt
 if (IsBIOSPasswordSet) {
    try {
-        Add-LogEntry -Type Debug -Message "Remove the BIOS password before deleting the file. Manual remediation required!"
+        New-BitlockerLog -Type Debug -Message "Remove the BIOS password before deleting the file. Manual remediation required!"
    }
    catch {
-        Add-LogEntry -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error -Message $_.Exception.Message
         Exit
    }
 }else {
-    Add-LogEntry -Type Debug -Message "Removing password file."
+    New-BitlockerLog -Type Debug -Message "Removing password file."
 
     Remove-Item -Path $LTSvc\Biospw.txt -Force
     
-    Add-LogEntry -Type Info -Message "Password file has been successfully removed."
+    New-BitlockerLog -Type Info -Message "Password file has been successfully removed."
 }
 
-Add-LogEntry -Type Debug -Message "Reboot required! Rerun script after reboot to finish Bitlocker setup."
+New-BitlockerLog -Type Debug -Message "Reboot required! Rerun script after reboot to finish Bitlocker setup."
