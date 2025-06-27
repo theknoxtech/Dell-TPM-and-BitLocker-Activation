@@ -441,6 +441,19 @@ function Get-NugetPackageProviderVersion {
     }
 
 }
+
+# TODO Verify function
+# Installs required version of Nuget
+function Install-NugetPackageProvider {
+    param (
+        [switch]$Install
+    )
+    
+    if ($Install){
+        
+        Install-PackageProvider -Name nuget -MinimumVersion "2.8.5.201" -Force
+    }
+}
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
