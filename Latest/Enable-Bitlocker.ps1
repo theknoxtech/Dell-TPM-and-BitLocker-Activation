@@ -43,31 +43,39 @@ function Get-LineNumber {
     return $callstack[$callstack.count -2].Position.StartLineNumber
 }
 
-# Creates a log entry in C:\Windows\LTSvc\packages\enable_bitlocker.txt
-function Add-LogEntry {
-    
-    Param(
-    [string]$Message,
-    [Logs]$Type
+function New-BitlockerLog {
+    param(
+        [Logs]$Type,
+        [string]$Message
     )
 
     enum Logs {
-        Error
-        Debug
         Info
+        Success
+        Failure
+        Error
     }
-    $Log = "$LTSvc\enable_bitlocker.txt"
+
+    $LogPath = "$LTSvc\enable_bitlocker.txt"
     $timestamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
-    $errordetails = (Get-Error).ErrorDetails
-    $line_number = Get-LineNumber
+
+    $console_logs = @{
+        Info = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
+        Success = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
+        Failure =  "$($timestamp) : FAILURE: Script Halted at Line: $($MyInvocation.ScriptLineNumber) "
+        Error = "$($timestamp) : ERROR: An error occurred at Line: $($MyInvocation.ScriptLineNumber) with the following error message: `n$($Error[0])"
+    }
 
     switch ($Type) {
-        ([Logs]::Debug) {Add-Content $Log "Line: $line_number : $timestamp  DEBUG: $message"; break  }
-        ([Logs]::Error) {Add-Content $Log "Line: $line_number : $timestamp ERROR: $message ERROR DETAILS: $errordetails"; break }
-        ([Logs]::Info) {Add-Content $Log "Line: $line_number : $timestamp INFO: $message"; break}
+        ([Logs]::Info) {$console_logs.Info | Tee-Object -FilePath $LogPath -Append ; break}
+        ([Logs]::Success) {$console_logs.Success | Tee-Object -FilePath $LogPath -Append ; break }
+        ([Logs]::Failure) {throw "$message`n  `n$($console_logs.Failure)"  | Tee-Object -FilePath $LogPath -Append; break }
+        ([Logs]::Error) {$console_logs.Error | Tee-Object -FilePath $LogPath -Append; break} 
+
     }
 }
 
+# TODO review function 
 # Convert exception to string and match for HRESULT code and return it
 function Get-ExceptionCode {
     param (
