@@ -402,7 +402,8 @@ function Install-DellBiosProvider {
 # Returns [bool] true or false if NuGet is installed and if a compatible version. Returns [string] if NuGet not installed
 function Get-NugetPackageProviderVersion {
     param(
-        [switch]$InstallCheck
+        [switch]$InstallCheck,
+        [switch]$Version
     )
 
         $IsInstalled = Get-PackageProvider -ListAvailable -Name Nuget -ErrorAction SilentlyContinue
@@ -425,11 +426,16 @@ function Get-NugetPackageProviderVersion {
 
         }elseif ($null -eq $IsInstalled) {
 
-            return "Nuget Not Installed"
+            return "Nuget not installed"
         }
 
-        return
+    }elseif ($Version) {
+
+        return $ProviderVersion
     }
+
+    return 
+
 
 }
 
@@ -456,9 +462,8 @@ if (!(Get-ExecutionPolicy) -eq "Bypass") {
         Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
     }
     catch [System.Management.Automation.RuntimeException] {
-        # ERROR: Policy overridden by a policy defined at a more specific scope
-            New-BitlockerLog -Type Error -Message $_.Exception.Message
-            New-BitlockerLog -Type Error -Message $_.ErrorDetails
+
+            New-BitlockerLog -Type Error
     }
 
 }
@@ -585,14 +590,15 @@ Switch ($bitlocker_settings){
     }
 }
 
-# Install Microsoft Runtime Libraries
-# TODO Add installation instructions
 
-New-BitlockerLog -Type Info -Message "Checking and installing dependencies for TPM enablement"
+# TODO Add installation instructions
+New-BitlockerLog -Type Info -Message "Verifying dependencies for TPM enablement"
 
 $Products = Get-CimInstance Win32_Product
 
+# Install Microsoft Runtime Libraries
 if (!($bitlocker_settings.TPMReady)) {
+
     # Install Microsoft Visual runtime 2010
     try {
 
@@ -616,6 +622,7 @@ if (!($bitlocker_settings.TPMReady)) {
         throw
     }
 
+    # Install Microsoft Visual runtime 2022
     try {
 
         New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2022 is installed"
@@ -623,6 +630,7 @@ if (!($bitlocker_settings.TPMReady)) {
         if ($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" }) {
 
             New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is already installed"
+
         }else {
             
             New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2022"
@@ -643,9 +651,59 @@ if (!($bitlocker_settings.TPMReady)) {
 }
 
 
+# Install Nuget Package Provider
+$NugetVersion = Get-NugetPackageProviderVersion -Version
 
-# Install Nuget
-# TODO Add installation instructions
+New-BitlockerLog -Type Info -Message "Verifying Nuget package provider installation"
+
+switch (Get-NugetPackageProviderVersion -InstallCheck) {
+
+    ($_ -eq $true) {
+
+        New-BitlockerLog -Type Info -Message "Nuget is installed with a compatible version"; break
+    }
+    ($_ -eq $false) {
+
+        New-BitlockerLog -Type Info -Message "Nuget version: $($NugetVersion) is not compatible and will be upgraded"
+
+        try {
+            
+            New-BitlockerLog -Type Info -Message "Installing Nuget package provider"
+
+            Install-NugetPackageProvider -Install
+
+            New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
+
+        }
+        catch {
+
+            New-BitlockerLog -Type Error
+            throw
+
+        };break
+
+    }
+    ($_ -eq "Nuget not installed") {
+
+        try {
+        
+        New-BitlockerLog -Type Info -Message "Nuget was not found. Installing Nuget package provider"
+
+        Install-NugetPackageProvider -Install
+
+        New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
+            
+        }
+        catch {
+
+            New-BitlockerLog -type Error
+            throw
+
+        }; break
+        
+
+    }
+}
 
 
 <# # Install DellBiosProvider
