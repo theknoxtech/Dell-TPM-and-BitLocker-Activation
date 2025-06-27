@@ -201,54 +201,35 @@ function Set-BitlockerState {
 
 # Check if Microsoft Visual C++ Redistributables are installed and if not install Visual C++ 2010 and Visual C++ 2015-2022
 function Install-Redistributables {
-   
-    $products = Get-CimInstance win32_product
-
+    param(
+        [switch]$Install2010,
+        [switch]$Install2022
+    )
     # Microsoft Visual C++ 2010 Redistributable
-  
-    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" })) {
-    
-        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2010 Redistributable already installed."
-    }
-    
-    else {
-       
-        Add-LogEntry -Debug -Message "Installing Microsoft Visual C++ 2010 Redistributable."
-
-        $working_dir = $PWD
-
-        [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
-        Set-Location $LTSvc
-        .\vcredist_2010_x64.exe /extract:vc2010 /q /norestart
-        Start-Sleep -Seconds 1.5
-        Set-Location $LTSvc\vc2010
-        .\Setup.exe /q | Wait-Process
-    
-        Set-Location $working_dir
-
-        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2010 Redistributable has been installed."
-    }
-    # Microsoft Visual C++ 2015-2022 Redistributable
- 
-    if (($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" })) {
-
-        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2015-2022 Redistributable already installed."
-    }
-   
-    else {
+    if ($Install2010){
         
-        Add-LogEntry -Type Debug -Message "Installing Microsoft Visual C++ 2015-2022 Redistributable."
+            $working_dir = $PWD
 
-        $working_dir = $PWD
+            [System.NET.WebClient]::new().DownloadFile("https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe", "$($LTSvc)\vcredist_2010_x64.exe")
+            Set-Location $LTSvc
+            .\vcredist_2010_x64.exe /extract:vc2010 /q /norestart
+            Start-Sleep -Seconds 1.5
+            Set-Location $LTSvc\vc2010
+            .\Setup.exe /q | Wait-Process
+            Set-Location $working_dir
 
-        [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
-        Set-Location $LTSvc
-        .\vc_redist.x64.exe /q /norestart | Wait-Process
-    
-        Set-Location $working_dir
+        }
+    # Microsoft Visual C++ 2015-2022 Redistributable
+    if ($Install2022){
 
-        Add-LogEntry -Type Info -Message "Microsoft Visual C++ 2015-2022 Redistributable has been installed."
-    }
+            $working_dir = $PWD
+
+            [System.NET.WebClient]::new().DownloadFile("https://aka.ms/vs/17/release/vc_redist.x64.exe", "$($LTSvc)\vc_redist.x64.exe")
+            Set-Location $LTSvc
+            .\vc_redist.x64.exe /q /norestart | Wait-Process
+            Set-Location $working_dir
+        }
+    return
 }
 
 # Returns current password value as a [Bool]
@@ -593,10 +574,71 @@ Switch ($bitlocker_settings){
         
     }
 }
-# Microsoft Visual C++ Runtime Libraries
-Install-Redistributables
 
-# Install DellBiosProvider
+# Install Microsoft Runtime Libraries
+# TODO Add installation instructions
+
+New-BitlockerLog -Type Info -Message "Checking and installing dependencies for TPM enablement"
+
+$Products = Get-CimInstance Win32_Product
+
+if (!($bitlocker_settings.TPMReady)) {
+    # Install Microsoft Visual runtime 2010
+    try {
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2010 is installed"
+
+        if($Products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is already installed"
+
+        }else{
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2010"
+
+            Install-Redistributables -Install2010
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is installed"
+        }
+    }
+    catch {
+
+        New-BitlockerLog -Type Error 
+        throw
+    }
+
+    try {
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2022 is installed"
+
+        if ($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is already installed"
+        }else {
+            
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2022"
+
+            Install-Redistributables -Install2022
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is installed"
+
+        }
+        
+    }
+    catch {
+        
+        New-BitlockerLog -Type Error
+        throw
+    }
+
+}
+
+
+
+# Install Nuget
+# TODO Add installation instructions
+
+
+<# # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
     Add-LogEntry -Type Debug -Message "Installing DellBiosProvider."
@@ -616,8 +658,9 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
     Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully." 
 
-}
+} #>
 
+# TODO Review setting BIOS password and error handling
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
