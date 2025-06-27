@@ -334,6 +334,42 @@ function IsTPMActivated {
    }
 }
 
+# TODO Verify function
+# Returns [bool] true or false if DellBiosProvider is installed and if a compatible version. Returns [string] if module not installed
+function Get-DellBiosProviderVersion {
+
+    param (
+        [switch]$InstallCheck
+    )
+
+    $MinVersion = [version]::new("2.7.2")
+
+    $IsInstalled = Get-Module -ListAvailable -Name DellBiosProvider -ErrorAction SilentlyContinue
+
+    $ModuleVersion = (Get-Module -ListAvailable -Name DellBIOSProvider).version
+
+    if ($InstallCheck) {
+
+        if ($IsInstalled -and ($ModuleVersion -ge $MinVersion)) {
+
+        # Return true if compatible version installed
+            Return $true
+        
+        }elseif ($IsInstalled -and ($ModuleVersion -lt $MinVersion)) {
+            
+        # Return false  if incompatible version installed
+            return $false
+
+        }elseif ($null -eq $IsInstalled) {
+
+            return "DellBiosProvider NOT installed"
+        }
+
+        return
+    }
+
+}
+
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
