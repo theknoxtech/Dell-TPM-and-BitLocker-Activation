@@ -36,7 +36,7 @@ None.
 # Global Variables
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
-
+$global:TimeStamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
 # Gets the line number of the executing command
 function Get-LineNumber {
     $callstack = Get-PSCallStack
@@ -57,7 +57,6 @@ function New-BitlockerLog {
     }
 
     $LogPath = "$LTSvc\enable_bitlocker.txt"
-    $timestamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
 
     $console_logs = @{
         Info = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
@@ -71,6 +70,20 @@ function New-BitlockerLog {
         ([Logs]::Success) {$console_logs.Success | Tee-Object -FilePath $LogPath -Append ; break }
         ([Logs]::Failure) {throw "$message`n  `n$($console_logs.Failure)"  | Tee-Object -FilePath $LogPath -Append; break }
         ([Logs]::Error) {$console_logs.Error | Tee-Object -FilePath $LogPath -Append; break} 
+
+    }
+}
+
+function Stop-ScriptExecution {
+    param (
+        [switch]$ExitScript
+    )
+    
+    $Failure =  "$($timestamp) : FAILURE: Script Halted at Line: $($MyInvocation.ScriptLineNumber) "
+
+    if ($ExitScript){ 
+
+        throw "$message`n  `n$($Failure)"  | Tee-Object -FilePath $LogPath -Append
 
     }
 }
@@ -330,7 +343,8 @@ function IsTPMActivated {
 function Get-DellBiosProviderVersion {
 
     param (
-        [switch]$InstallCheck
+        [switch]$InstallCheck,
+        [switch]$Version
     )
 
     $MinVersion = [version]::new("2.7.2")
@@ -357,6 +371,9 @@ function Get-DellBiosProviderVersion {
         }
 
         return
+    }elseif ($Version) {
+
+        return $ModuleVersion
     }
 
 }
@@ -374,9 +391,9 @@ function Install-DellBiosProvider {
     $ModuleVersion = (Get-Module -ListAvailable -Name DellBIOSProvider).version
 
     $ModuleOptions = @{
-        "Install" = Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force
+        "Install" = Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force | Import-Module
 
-        "Upgrade" = Update-Module -Name DellBiosProvider -RequiredVersion "2.7.2" -Force
+        "Upgrade" = Update-Module -Name DellBiosProvider -RequiredVersion "2.7.2" -Force | Import-Module 
 
         "Uninstall" = Uninstall-Module -Name DellBIOSProvider -RequiredVersion $ModuleVersion -Force
     }
@@ -619,7 +636,7 @@ if (!($bitlocker_settings.TPMReady)) {
     catch {
 
         New-BitlockerLog -Type Error 
-        throw
+        Stop-ScriptExecution -ExitScript
     }
 
     # Install Microsoft Visual runtime 2022
@@ -645,7 +662,7 @@ if (!($bitlocker_settings.TPMReady)) {
     catch {
         
         New-BitlockerLog -Type Error
-        throw
+        Stop-ScriptExecution -ExitScript
     }
 
 }
@@ -678,7 +695,7 @@ switch (Get-NugetPackageProviderVersion -InstallCheck) {
         catch {
 
             New-BitlockerLog -Type Error
-            throw
+            Stop-ScriptExecution -ExitScript
 
         };break
 
@@ -697,7 +714,7 @@ switch (Get-NugetPackageProviderVersion -InstallCheck) {
         catch {
 
             New-BitlockerLog -type Error
-            throw
+            Stop-ScriptExecution -ExitScript
 
         }; break
         
@@ -705,6 +722,54 @@ switch (Get-NugetPackageProviderVersion -InstallCheck) {
     }
 }
 
+# Install DellBiosProvider
+$DellBiosProviderVersion = Get-DellBiosProviderVersion -Version
+$RequiredVersion = "2.7.2"
+
+New-BitlockerLog -Type Info -Message "Verifying DellBiosProvider installation"
+
+switch (Get-DellBiosProviderVersion -InstallCheck) {
+    ($_ -eq $true) {
+
+        New-BitlockerLog -Type Info -Message "A compatible version of DellBiosProvider is already installed. Continuing"; break
+    }
+    ($_ -eq $false) {
+
+        New-BitlockerLog -Type Info -Message "Current DellBiosProvider version: $($DellBiosProviderVersion) is not compatible. Attempting to update to $($RequiredVersion)"
+
+        try {
+
+            Install-DellBiosProvider -Upgrade
+
+            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
+            
+        }
+        catch {
+            
+            New-BitlockerLog -Type Error
+            Stop-ScriptExecution -ExitScript
+        }
+
+    }
+    ($_ -eq "DellBiosProvider NOT installed") {
+
+        New-BitlockerLog -Type Info -Message "DellBiosProvider not found. Attempting install"
+
+        try {
+            
+            Install-DellBiosProvider -Install
+
+            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
+
+        }
+        catch {
+            
+            New-BitlockerLog -Type Error
+            Stop-ScriptExecution -ExitScript
+        }
+
+    }
+}
 
 <# # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
