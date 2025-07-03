@@ -473,7 +473,7 @@ function Install-NugetPackageProvider {
 ########################
 
 # Check Execution Policy
-New-BitlockerLog -Type Debug -Message "Checking execution policy."
+New-BitlockerLog -Type Info -Message "Checking execution policy."
 if (!(Get-ExecutionPolicy) -eq "Bypass") {
     try {
         Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
@@ -487,7 +487,7 @@ if (!(Get-ExecutionPolicy) -eq "Bypass") {
 
 # Check BIOS Version
 # Upgrade BIOS if not up to date
-New-BitlockerLog -Type Debug -Message "Checking BIOS version."
+New-BitlockerLog -Type Info -Message "Checking BIOS version."
 $current_ver = Get-SMBiosVersion
 $required_ver = 2.4
 if (Get-SMBiosRequiresUpgrade) {
@@ -524,16 +524,16 @@ Switch ($bitlocker_settings){
             switch ($bitlocker_settings) {
 
                 {$_.TPMProtectorExists -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Adding TPM Protector."
+                    New-BitlockerLog -Type Info -Message "Adding TPM Protector."
                     Add-KeyProtector -TPMProtector
                     
                 }
                 {$_.RecoveryPasswordExists -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Adding Recovery Password."
+                    New-BitlockerLog -Type Info -Message "Adding Recovery Password."
                     Add-KeyProtector -RecoveryPassword      
                 }
                 {$_.Protected -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Enabling Protection."
+                    New-BitlockerLog -Type Info -Message "Enabling Protection."
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
@@ -550,28 +550,28 @@ Switch ($bitlocker_settings){
     }
     {$_.TPMReady -eq $false} {
         Write-Host "TPM not ready. Attempting to enable TPM."
-        New-BitlockerLog -Type Debug -Message "TPM not ready. Attempting to enable."; break}
+        New-BitlockerLog -Type Info -Message "TPM not ready. Attempting to enable."; break}
     
     # This statment is to mitigate an instance of the drive being fully encrypted, with no key protectors and protection status off
     # It is similar to the first statement, but is for separate bugs    
     {$_.Encrypted}{
         Write-host "Drive is encrypted. Continuing checks"
 
-        New-BitlockerLog -Type Debug -Message "Drive is encrypted continuing checks."
+        New-BitlockerLog -Type Info -Message "Drive is encrypted continuing checks."
         try {
             switch ($bitlocker_settings) {
 
                 {$_.TPMProtectorExists -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Adding TPM Protector."
+                    New-BitlockerLog -Type Info -Message "Adding TPM Protector."
                     Add-KeyProtector -TPMProtector
                     
                 }
                 {$_.RecoveryPasswordExists -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Adding Recovery Password."
+                    New-BitlockerLog -Type Info -Message "Adding Recovery Password."
                     Add-KeyProtector -RecoveryPassword      
                 }
                 {$_.Protected -eq $false}{
-                    New-BitlockerLog -Type Debug -Message "Enabling Protection."
+                    New-BitlockerLog -Type Info -Message "Enabling Protection."
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
@@ -590,7 +590,7 @@ Switch ($bitlocker_settings){
     {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)}{
         Write-Host "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
 
-        New-BitlockerLog -Type Debug -Message "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
+        New-BitlockerLog -Type Info -Message "Drive unencrypted and TPM ready. Attempting to enable Bitlocker."
         try {
             Set-BitlockerState
             New-BitlockerLog -Type Info -Message "Bitlocker is enabled. Protection status will change to ON once fully encrypted."
@@ -614,7 +614,7 @@ New-BitlockerLog -Type Info -Message "Verifying dependencies for TPM enablement"
 $Products = Get-CimInstance Win32_Product
 
 # Install Microsoft Runtime Libraries
-if (!($bitlocker_settings.TPMReady)) {
+if (!($bitlocker_settings.TPMReady) -and !(Get-SMBiosRequiresUpgrade)) {
 
     # Install Microsoft Visual runtime 2010
     try {
@@ -774,7 +774,7 @@ switch (Get-DellBiosProviderVersion -InstallCheck) {
 <# # Install DellBiosProvider
 if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 
-    New-BitlockerLog -Type Debug -Message "Installing DellBiosProvider."
+    New-BitlockerLog -Type Info -Message "Installing DellBiosProvider."
 
     try {
         Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
@@ -784,7 +784,7 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
     catch {
         New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        New-BitlockerLog -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
+        New-BitlockerLog -Type Info -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
         Exit 
         
     }
@@ -797,12 +797,12 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
-        New-BitlockerLog -Type Debug -Message "Attempting to set password."
-        New-BitlockerLog -Type Debug -Message "Generating Password."
+        New-BitlockerLog -Type Info -Message "Attempting to set password."
+        New-BitlockerLog -Type Info -Message "Generating Password."
         Set-BiosAdminPassword -GeneratePassword
 
     try {
-        New-BitlockerLog -Type Debug -Message "Setting BIOS Password."
+        New-BitlockerLog -Type Info -Message "Setting BIOS Password."
 
         Set-BiosAdminPassword -AddPassword
 
@@ -813,7 +813,7 @@ if (!(IsBIOSPasswordSet)) {
         # If this is caught then a password was previously set
         New-BitlockerLog -Type Error -Message $_.Exception.Message
         
-        New-BitlockerLog -Type Debug -Message "Failed to set password. A previous password has been set."
+        New-BitlockerLog -Type Info -Message "Failed to set password. A previous password has been set."
         Exit
     
     }
@@ -835,7 +835,7 @@ if (IsTPMSecurityEnabled) {
 }else {
 
     try {
-        New-BitlockerLog -Type Debug -Message "Attempting to enable TPM Security in the BIOS."
+        New-BitlockerLog -Type Info -Message "Attempting to enable TPM Security in the BIOS."
 
         Set-Item -Path DellSmbios:\TpmSecurity\TpmSecurity Enabled -Password $credential -ErrorAction Stop
 
@@ -845,7 +845,7 @@ if (IsTPMSecurityEnabled) {
 
         New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        New-BitlockerLog -Type Debug -Message "The option to enable TPM Security was not found."
+        New-BitlockerLog -Type Info -Message "The option to enable TPM Security was not found."
     }
    
 }
@@ -858,7 +858,7 @@ if (IsTPMActivated) {
 }else {
     try {
 
-        New-BitlockerLog -Type Debug -Message "Attempting to activate the TPM."
+        New-BitlockerLog -Type Info -Message "Attempting to activate the TPM."
 
         Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop    
     }
@@ -866,7 +866,7 @@ if (IsTPMActivated) {
         # Catches "Item Not Found" Error and writes a log
         New-BitlockerLog -Type Error -Message $_.Exception.Message
 
-        New-BitlockerLog -Type Debug -Message "The option to activate the TPM was not found."
+        New-BitlockerLog -Type Info -Message "The option to activate the TPM was not found."
     }
 
     New-BitlockerLog -Type Info -Message "TPM has been enabled."
@@ -876,7 +876,7 @@ if (IsTPMActivated) {
 if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
     
     try {
-        New-BitlockerLog -Type Debug -Message "Attempting removal of BIOS password."
+        New-BitlockerLog -Type Info -Message "Attempting removal of BIOS password."
 
         Get-PWFileInfo -IsFilePresent
 
@@ -896,9 +896,9 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
         $fileCheck = Get-PWFileInfo -PasswordCount
 
         switch ($fileCheck) {
-            {$_ -lt 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entries. Manual removal and remediation required!"; break}
-            {$_ -gt 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entries. Manual remediation required!"; break}
-            {$_ -eq 1} {New-BitlockerLog -Type Debug -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
+            {$_ -lt 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entries. Manual removal and remediation required!"; break}
+            {$_ -gt 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entries. Manual remediation required!"; break}
+            {$_ -eq 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
         }
         Exit
         
@@ -915,18 +915,18 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
 # Remove BiosPW.txt
 if (IsBIOSPasswordSet) {
    try {
-        New-BitlockerLog -Type Debug -Message "Remove the BIOS password before deleting the file. Manual remediation required!"
+        New-BitlockerLog -Type Info -Message "Remove the BIOS password before deleting the file. Manual remediation required!"
    }
    catch {
         New-BitlockerLog -Type Error -Message $_.Exception.Message
         Exit
    }
 }else {
-    New-BitlockerLog -Type Debug -Message "Removing password file."
+    New-BitlockerLog -Type Info -Message "Removing password file."
 
     Remove-Item -Path $LTSvc\Biospw.txt -Force
     
     New-BitlockerLog -Type Info -Message "Password file has been successfully removed."
 }
 
-New-BitlockerLog -Type Debug -Message "Reboot required! Rerun script after reboot to finish Bitlocker setup."
+New-BitlockerLog -Type Info -Message "Reboot required! Rerun script after reboot to finish Bitlocker setup."
