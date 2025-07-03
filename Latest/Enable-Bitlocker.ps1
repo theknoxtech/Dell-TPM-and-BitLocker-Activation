@@ -509,15 +509,15 @@ Switch ($bitlocker_settings){
                 }
             }
             New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
             New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
 
-        Exit
+        Stop-ScriptExecution  -ExitScript
     }
     {$_.TPMReady -eq $false} {
         Write-Host "TPM not ready. Attempting to enable TPM."
@@ -547,15 +547,15 @@ Switch ($bitlocker_settings){
                 }
             }
             New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
             New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
       
-        Exit
+        Stop-ScriptExecution  -ExitScript
 
     }
     {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)}{
@@ -565,15 +565,15 @@ Switch ($bitlocker_settings){
         try {
             Set-BitlockerState
             New-BitlockerLog -Type Info -Message "Bitlocker is enabled. Protection status will change to ON once fully encrypted."
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
             New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Exit
+            Stop-ScriptExecution  -ExitScript
         }
 
-        Exit
+        Stop-ScriptExecution  -ExitScript
         
     }
 }
@@ -787,6 +787,7 @@ if (!(IsBIOSPasswordSet)) {
         # TODO add error handling for Dellsmbios not found
     
     
+}
 }elseif (IsBIOSPasswordSet) {
     
     New-BitlockerLog -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
@@ -868,7 +869,7 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
             {$_ -gt 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entries. Manual remediation required!"; break}
             {$_ -eq 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
         }
-        Exit
+        Stop-ScriptExecution  -ExitScript
         
     }
     catch [System.ArgumentOutOfRangeException] {
@@ -887,7 +888,7 @@ if (IsBIOSPasswordSet) {
    }
    catch {
         New-BitlockerLog -Type Error -Message $_.Exception.Message
-        Exit
+        Stop-ScriptExecution  -ExitScript
    }
 }else {
     New-BitlockerLog -Type Info -Message "Removing password file."
