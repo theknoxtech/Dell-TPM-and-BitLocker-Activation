@@ -52,7 +52,6 @@ function New-BitlockerLog {
     enum Logs {
         Info
         Success
-        Failure
         Error
     }
 
@@ -61,14 +60,12 @@ function New-BitlockerLog {
     $console_logs = @{
         Info = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
         Success = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
-        Failure =  "$($timestamp) : FAILURE: Script Halted at Line: $($MyInvocation.ScriptLineNumber) "
         Error = "$($timestamp) : ERROR: An error occurred at Line: $($MyInvocation.ScriptLineNumber) with the following error message: `n$($Error[0])"
     }
 
     switch ($Type) {
         ([Logs]::Info) {$console_logs.Info | Tee-Object -FilePath $LogPath -Append ; break}
         ([Logs]::Success) {$console_logs.Success | Tee-Object -FilePath $LogPath -Append ; break }
-        ([Logs]::Failure) {throw "$message`n  `n$($console_logs.Failure)"  | Tee-Object -FilePath $LogPath -Append; break }
         ([Logs]::Error) {$console_logs.Error | Tee-Object -FilePath $LogPath -Append; break} 
 
     }
@@ -78,7 +75,7 @@ function Stop-ScriptExecution {
     param (
         [switch]$ExitScript
     )
-    
+    $LogPath = "$LTSvc\enable_bitlocker.txt"
     $Failure =  "$($timestamp) : FAILURE: Script Halted at Line: $($MyInvocation.ScriptLineNumber) "
 
     if ($ExitScript){ 
@@ -344,7 +341,7 @@ function Get-DellBiosProviderVersion {
 
     param (
         [switch]$InstallCheck,
-        [switch]$Version
+        [switch]$InstalledVersion
     )
 
     $MinVersion = [version]::new("2.7.2")
@@ -371,9 +368,11 @@ function Get-DellBiosProviderVersion {
         }
 
         return
-    }elseif ($Version) {
+    }
+    
+    if ($InstalledVersion){
 
-        return $ModuleVersion
+        Get-InstalledModule -Name DellBiosProvider | Select-Object -Property version
     }
 
 }
@@ -382,37 +381,9 @@ function Get-DellBiosProviderVersion {
 # Installs, Uninstalls, or Upgrades DellBiosProvider
 function Install-DellBiosProvider {
 
-    Param (
-        [switch]$Install,
-        [switch]$Uninstall,
-        [switch]$Upgrade
-    )
+        Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force
+        Import-Module -Name DellBiosProvider
 
-    $ModuleVersion = (Get-Module -ListAvailable -Name DellBIOSProvider).version
-
-    $ModuleOptions = @{
-        "Install" = Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force | Import-Module
-
-        "Upgrade" = Update-Module -Name DellBiosProvider -RequiredVersion "2.7.2" -Force | Import-Module 
-
-        "Uninstall" = Uninstall-Module -Name DellBIOSProvider -RequiredVersion $ModuleVersion -Force
-    }
-
-    if ($Install) {
-
-        $ModuleOptions.Install
-
-    }elseif ($Upgrade) {
-
-        $ModuleOptions.Upgrade
-
-    }elseif ($Uninstall) {
-
-        $ModuleOptions.Uninstall
-    }
-
-
-    return
 }
 
 # TODO Verify function
@@ -723,17 +694,17 @@ switch (Get-NugetPackageProviderVersion -InstallCheck) {
 }
 
 # Install DellBiosProvider
-$DellBiosProviderVersion = Get-DellBiosProviderVersion -Version
+$IsDellBiosProviderInstalled = Get-DellBiosProviderVersion -InstallCheck
+$DellBiosProviderVersion = Get-DellBiosProviderVersion -InstalledVersion
 $RequiredVersion = "2.7.2"
 
 New-BitlockerLog -Type Info -Message "Verifying DellBiosProvider installation"
 
-switch (Get-DellBiosProviderVersion -InstallCheck) {
-    ($_ -eq $true) {
+if ($IsDellBiosProviderInstalled -eq $true){
 
-        New-BitlockerLog -Type Info -Message "A compatible version of DellBiosProvider is already installed. Continuing"; break
-    }
-    ($_ -eq $false) {
+    New-BitlockerLog -Type Info -Message "A compatible version of DellBiosProvider is already installed. Continuing"
+
+}elseif (!($IsDellBiosProviderInstalled)) {
 
         New-BitlockerLog -Type Info -Message "Current DellBiosProvider version: $($DellBiosProviderVersion) is not compatible. Attempting to update to $($RequiredVersion)"
 
@@ -750,8 +721,7 @@ switch (Get-DellBiosProviderVersion -InstallCheck) {
             Stop-ScriptExecution -ExitScript
         }
 
-    }
-    ($_ -eq "DellBiosProvider NOT installed") {
+}elseif (($IsDellBiosProviderInstalled) -eq "DellBiosProvider NOT installed") {
 
         New-BitlockerLog -Type Info -Message "DellBiosProvider not found. Attempting install"
 
@@ -761,14 +731,11 @@ switch (Get-DellBiosProviderVersion -InstallCheck) {
 
             New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
 
-        }
-        catch {
+        }catch {
             
             New-BitlockerLog -Type Error
             Stop-ScriptExecution -ExitScript
         }
-
-    }
 }
 
 <# # Install DellBiosProvider
@@ -814,9 +781,10 @@ if (!(IsBIOSPasswordSet)) {
         New-BitlockerLog -Type Error -Message $_.Exception.Message
         
         New-BitlockerLog -Type Info -Message "Failed to set password. A previous password has been set."
-        Exit
-    
+        Stop-ScriptExecution -ExitScript
     }
+    catch [System.Management.Automation.DriveNotFoundException] {
+        # TODO add error handling for Dellsmbios not found
     
     
 }elseif (IsBIOSPasswordSet) {
