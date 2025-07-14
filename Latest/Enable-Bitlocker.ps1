@@ -771,7 +771,7 @@ if (!(IsBIOSPasswordSet)) {
     try {
         New-BitlockerLog -Type Info -Message "Setting BIOS Password."
 
-        Set-BiosAdminPassword -AddPassword
+    Set-BiosAdminPassword -AddPassword
 
         New-BitlockerLog -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
 
