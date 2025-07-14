@@ -473,29 +473,155 @@ Switch ($bitlocker_settings){
         
     }
 }
-# Microsoft Visual C++ Runtime Libraries
-Install-Redistributables
+# Install Microsoft Runtime Libraries
+# TODO Add installation instructions
 
-# Install DellBiosProvider
-if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
+New-BitlockerLog -Type Info -Message "Checking and installing dependencies for TPM enablement"
 
-    Add-LogEntry -Type Debug -Message "Installing DellBiosProvider."
+$Products = Get-CimInstance Win32_Product
+
+if (!($bitlocker_settings.TPMReady) -and !(Get-SMBiosRequiresUpgrade)) {
+    # Install Microsoft Visual runtime 2010
+    try {
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2010 is installed"
+
+        if($Products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is already installed"
+
+        }else{
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2010"
+
+            Install-Redistributables -Install2010
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is installed"
+        }
+    }
+    catch {
+
+        New-BitlockerLog -Type Error 
+        Stop-ScriptExecution -ExitScript
+    }
 
     try {
-        Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
-        Import-Module DellBiosProvider -Verbose
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2022 is installed"
+
+        if ($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is already installed"
+        }else {
+            
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2022"
+
+            Install-Redistributables -Install2022
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is installed"
+
+        }
         
     }
     catch {
-        Add-LogEntry -Type Error -Message $_.Exception.Message
-
-        Add-LogEntry -Type Debug -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
-        Exit 
         
+        New-BitlockerLog -Type Error
+        Stop-ScriptExecution -ExitScript
     }
 
-    Add-LogEntry -Type Info -Message "DellBiosProvider installed successfully." 
+}
 
+# Install Nuget Package Provider
+$NugetVersion = Get-NugetPackageProviderVersion -InstalledVersion
+$IsNugetInstalled = Get-NugetPackageProviderVersion -InstallCheck
+
+New-BitlockerLog -Type Info -Message "Verifying Nuget package provider installation"
+
+if (($IsNugetInstalled) -eq $true) {
+
+        New-BitlockerLog -Type Info -Message "Nuget is installed with a compatible version"
+    
+    }elseif (($IsNugetInstalled) -eq $false) {
+
+        New-BitlockerLog -Type Info -Message "Nuget version: $($NugetVersion) is not compatible and will be upgraded"
+
+        try {
+            
+            New-BitlockerLog -Type Info -Message "Installing Nuget package provider"
+
+            Install-NugetPackageProvider -Install
+
+            New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
+
+        }
+        catch {
+
+            New-BitlockerLog -Type Error
+            Stop-ScriptExecution -ExitScript
+
+        }
+
+    }elseif (($IsNugetInstalled) -eq "Nuget not installed" ) {
+
+        try {
+
+        New-BitlockerLog -Type Info -Message "Nuget was not found. Installing Nuget package provider"
+        Install-NugetPackageProvider -Install
+        New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
+
+        }
+        catch {
+
+        New-BitlockerLog -type Error
+        Stop-ScriptExecution -ExitScript
+
+        }
+    }   
+
+
+# Install DellBiosProvider
+$IsDellBiosProviderInstalled = Get-DellBiosProviderVersion -InstallCheck
+$DellBiosProviderVersion = Get-DellBiosProviderVersion -InstalledVersion
+$RequiredVersion = "2.7.2"
+
+New-BitlockerLog -Type Info -Message "Verifying DellBiosProvider installation"
+
+if ($IsDellBiosProviderInstalled -eq $true){
+
+    New-BitlockerLog -Type Info -Message "A compatible version of DellBiosProvider is already installed. Continuing"
+    Import-Module -Name  DellBIOSProvider
+
+}elseif (!($IsDellBiosProviderInstalled)) {
+
+        New-BitlockerLog -Type Info -Message "Current DellBiosProvider version: $($DellBiosProviderVersion) is not compatible. Attempting to update to $($RequiredVersion)"
+
+        try {
+
+            Install-DellBiosProvider -Upgrade
+
+            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
+            
+        }
+        catch {
+            
+            New-BitlockerLog -Type Error
+            Stop-ScriptExecution -ExitScript
+        }
+
+}elseif (($IsDellBiosProviderInstalled) -eq "DellBiosProvider NOT installed") {
+
+        New-BitlockerLog -Type Info -Message "DellBiosProvider not found. Attempting install"
+
+        try {
+            
+            Install-DellBiosProvider -Install
+
+            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
+
+        }catch {
+            
+            New-BitlockerLog -Type Error
+            Stop-ScriptExecution -ExitScript
+        }
 }
 
 # Set BIOS Password
