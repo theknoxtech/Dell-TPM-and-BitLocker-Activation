@@ -501,33 +501,62 @@ if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
-        Add-LogEntry -Type Debug -Message "Attempting to set password."
-        Add-LogEntry -Type Debug -Message "Generating Password."
-        Set-BiosAdminPassword -GeneratePassword
+    New-BitlockerLog -Type Info -Message "Attempting to set password."
 
-    try {
-        Add-LogEntry -Type Debug -Message "Setting BIOS Password."
+    New-BitlockerLog -Type Info -Message "Generating Password."
+
+    Set-BiosAdminPassword -GeneratePassword
+
+try {
+    New-BitlockerLog -Type Info -Message "Setting BIOS Password."
+
+    Set-BiosAdminPassword -AddPassword
+
+    New-BitlockerLog -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
+
+}
+catch [System.Management.Automation.PSSecurityException]  {
+    # If this is caught then a password was previously set
+    New-BitlockerLog -Type Error
+    
+    New-BitlockerLog -Type Info -Message "Failed to set password. A previous password has been set."
+
+    Stop-ScriptExecution -ExitScript
+}
+catch [System.Management.Automation.DriveNotFoundException] {
+    # If this is caught the DellSMBios PS Drive is not loaded
+    if ($IsDellBiosProviderInstalled) {
+
+        Import-Module -Name DellBIOSProvider -Force
+
+        if ((Test-Path -Path "DellSMbios:") -and !(IsBIOSPasswordSet)){
+
+            New-BitlockerLog -Type Info -Message "Attempting to retry setting BIOS password"
+
+            Set-BiosAdminPassword -AddPassword
+        }
+
+    }elseif (!($IsDellBiosProviderInstalled)) {
+        New-BitlockerLog -Type Info -Message "Setting password failed because DellBiosProvider is not installed. Attmepting install"
+
+        Install-DellBiosProvider
 
         Set-BiosAdminPassword -AddPassword
 
-        Add-LogEntry -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
+        New-BitlockerLog -Type Info -Message "BIOS password has been set to: $(Get-PWFileInfo -RetrieveLastPassword)"
 
+    }else {
+
+        New-BitlockerLog -Type Info -Message "Retry attempts to set BIOS password have failed because DellSMBios: was not found. Manual remediation required."
     }
-    catch [System.Management.Automation.PSSecurityException]  {
-        # If this is caught then a password was previously set
-        Add-LogEntry -Type Error -Message $_.Exception.Message
-        
-        Add-LogEntry -Type Debug -Message "Failed to set password. A previous password has been set."
-        Exit
-    
-    }
-    
-    
+
+}
+
 }elseif (IsBIOSPasswordSet) {
-    
-    Add-LogEntry -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
-    
-    Exit
+
+New-BitlockerLog -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
+
+Exit
 }
 
 # Enable TPM scurity in the BIOS
