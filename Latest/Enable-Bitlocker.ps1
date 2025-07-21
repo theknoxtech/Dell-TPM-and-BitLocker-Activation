@@ -326,13 +326,38 @@ function IsTPMSecurityEnabled {
 }
 
 # Check if TPM is Activated in the BIOS and return True or False
-function IsTPMActivated {
-    $tpm_activated = (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
+function IsTPMActivated  {
+    $TPMActivationValues = (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation -ErrorAction SilentlyContinue).PossibleValues 
+    $TPMActivationState = (Get-Item -Path DellSmbios:\TPMSecurity\TpmActivation -ErrorAction SilentlyContinue).CurrentValue
+    $CheckTPMSecurity = IsTPMSecurityEnabled
+    $TPMActivationEmpty = [string]::IsNullOrWhiteSpace($TPMActivationState)
+    $CheckTPM = Get-TPMState
 
-   switch ($tpm_activated) {
-    {$_ -eq "Enabled"} {$true}
-    {$_ -eq "Disabled"} {$false}
-   }
+    if (!($CheckTPMSecurity)){
+
+        try {
+            New-BitlockerLog -Type Info -Message "TPMSecurity is NOT enabled. Ensure you reboot the computer before attempting to enable."
+        }
+        catch {
+            throw "Reboot the computer and rerun the script"
+        }
+
+    }elseif(($CheckTPMSecurity = $true) -and ($TPMActivationValues -contains "Enabled") -and ($CheckTPM.CheckTPMReady() = $true)){
+
+        return $true
+
+
+    }elseif((IsTPMSecurityEnabled) -and ($TPMActivationEmpty) -and ($CheckTPM.CheckTPMReady() = $true)){
+
+        New-BitlockerLog -Type Info -Message "TPMActivation attribute is empty. This is normal if you have enabled TPMSecurity and can activate Bitlocker"
+        
+        return $true
+
+    }elseif((($CheckTPMSecurity = $true) -and ($TPMActivationValues -contains "Enabled")) -and ($TPMActivationState -eq "Disabled")){
+
+        return $false
+    }
+
 }
 
 # TODO Verify function
