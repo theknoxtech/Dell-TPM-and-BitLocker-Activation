@@ -8,7 +8,7 @@ This script is used to enable Bitlocker.
 This script is used to enable Bitlocker with TPM and Recovery Password protectors. It will also attempt to activate the TPM on Dell computers using the DellBiosProvider module.
 
 Author: Jon Witherspoon
-Last Modified: 12-30-24
+Last Modified: 7/23/2025 
 
 .PARAMETER Name
 
@@ -37,12 +37,8 @@ None.
 $global:LTSvc = "C:\Windows\LTSvc\packages"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 $global:TimeStamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
-# Gets the line number of the executing command
-function Get-LineNumber {
-    $callstack = Get-PSCallStack
-    return $callstack[$callstack.count -2].Position.StartLineNumber
-}
 
+# Create a log that outputs to the console and c:\Windows\Ltsvc\packages\enable-bitlocker.txt
 function New-BitlockerLog {
     param(
         [Logs]$Type,
@@ -56,6 +52,7 @@ function New-BitlockerLog {
     }
 
     $LogPath = "$LTSvc\enable_bitlocker.txt"
+    
 
     $console_logs = @{
         Info = "$($timestamp) : Line : $($MyInvocation.ScriptLineNumber) : $($message)"
@@ -82,21 +79,6 @@ function Stop-ScriptExecution {
 
         throw "$message`n  `n$($Failure)"  | Tee-Object -FilePath $LogPath -Append
 
-    }
-}
-
-# TODO review function 
-# Convert exception to string and match for HRESULT code and return it
-function Get-ExceptionCode {
-    param (
-        [String]$errorcode
-    )
-    $regex = "\((0x[0-9A-Fa-f]+)\)"
-
-    if ($errorcode.ToString() -match $regex) {
-
-        $code = $Matches[1]
-        return $code
     }
 }
 
@@ -255,8 +237,8 @@ function IsBIOSPasswordSet {
     return [System.Convert]::ToBoolean((Get-Item -Path DellSmBios:\Security\IsAdminpasswordSet).CurrentValue)
 }
 
-# TODO Separate into individual functions
 # Gets BiosPW.txt file presence and count of passwords in file
+
 function Get-PWFileInfo {
     
     param (
@@ -272,29 +254,39 @@ function Get-PWFileInfo {
     }
 }
 
-# TODO Separate into individual functions
 # Update Set-BiosAdminPassword function with GenerateRandomPassword
 function Set-BiosAdminPassword {
+    [CmdletBinding(DefaultParameterSetName="generate")]
     Param(
+        [Parameter(ParameterSetName="generate")]
         [switch]$GeneratePassword,
-        [switch]$AddPassword,
+        
+        [Parameter(ParameterSetName="set")]
+        [switch]$SetPassword,
+
+        [Parameter(ParameterSetName="remove")]
         [switch]$RemovePassword
         
     )
-
-    $request_password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content -replace "\W", '_' | Out-File $LTSvc\BiosPW.txt -Append
-    $password = Get-Content $LTSvc\Biospw.txt -Tail 1
-
+    
     if ($GeneratePassword)
     {   
-        $request_password 
+        $request_password = (Invoke-WebRequest -Uri "https://www.dinopass.com/password/strong").Content -replace "\W", '_' | Out-File $LTSvc\BiosPW.txt -Append
+        $request_password
     }
-    elseif ($AddPassword)
+    elseif ($SetPassword)
     {
-        Set-Item -Path DellSmBios:\Security\AdminPassword $password -ErrorAction Stop
+        $password = Get-Content $LTSvc\Biospw.txt -Tail 1
+        try {
+            Set-Item -Path DellSmBios:\Security\AdminPassword $password -ErrorAction Stop
+        }
+        catch {
+            New-BitlockerLog -Type Error
+        }
     }
     elseif ($RemovePassword)
     {
+        $password = Get-Content $LTSvc\Biospw.txt -Tail 1
         Set-Item -Path DellSmbios:\Security\AdminPassword ""  -Password $password -ErrorAction Stop
     }
 }
@@ -325,151 +317,136 @@ function IsTPMSecurityEnabled {
    }
 }
 
-# Check if TPM is Activated in the BIOS and return True or False
-function IsTPMActivated {
-    $tpm_activated = (Get-Item -Path DellSmbios:\TPMSecurity\TPMActivation).CurrentValue
 
-   switch ($tpm_activated) {
-    {$_ -eq "Enabled"} {$true}
-    {$_ -eq "Disabled"} {$false}
-   }
-}
-
-# TODO Verify function
-# Returns [bool] true or false if DellBiosProvider is installed and if a compatible version. Returns [string] if module not installed
-function Get-DellBiosProviderVersion {
-
-    param (
-        [switch]$InstallCheck,
-        [switch]$InstalledVersion
-    )
-
-    $MinVersion = [version]::new("2.7.2")
-
-    $IsInstalled = Get-Module -ListAvailable -Name DellBiosProvider -ErrorAction SilentlyContinue
-
-    $ModuleVersion = (Get-Module -ListAvailable -Name DellBIOSProvider).version
-
-    if ($InstallCheck) {
-
-        if ($IsInstalled -and ($ModuleVersion -ge $MinVersion)) {
-
-        # Return true if compatible version installed
-            Return $true
-        
-        }elseif ($IsInstalled -and ($ModuleVersion -lt $MinVersion)) {
-            
-        # Return false  if incompatible version installed
-            return $false
-
-        }elseif ($null -eq $IsInstalled) {
-
-            return "DellBiosProvider NOT installed"
-        }
-
-        return
-    }
-    
-    if ($InstalledVersion){
-
-        Get-InstalledModule -Name DellBiosProvider | Select-Object -Property version
-    }
-
-}
-
-# TODO Verify function
-# Installs, Uninstalls, or Upgrades DellBiosProvider
-function Install-DellBiosProvider {
-
-        Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force
-        Import-Module -Name DellBiosProvider
-
-}
 
 # TODO Verify function
 # Returns [bool] true or false if NuGet is installed and if a compatible version. Returns [string] if NuGet not installed
-function Get-NugetPackageProviderVersion {
-    param(
-        [switch]$InstallCheck,
-        [switch]$Version
-    )
-
-        $IsInstalled = Get-PackageProvider -ListAvailable -Name Nuget -ErrorAction SilentlyContinue
-        $ProviderVersion = (Get-PackageProvider -ListAvailable -Name Nuget ).version
-
-    
-    $MinVersion = [version]::new("2.8.5.201")
-
-    if ($InstallCheck) {
-
-        if ($IsInstalled -and ($ProviderVersion -ge $MinVersion)) {
-
-        # Return true if compatible version installed
-            Return $true
+function IsNugetInstalled {
         
-        }elseif ($IsInstalled -and ($ProviderVersion -lt $MinVersion)) {
-            
-        # Return false  if incompatible version installed
-            return $false
-
-        }elseif ($null -eq $IsInstalled) {
-
-            return "Nuget not installed"
-        }
-
-    }elseif ($Version) {
-
-        return $ProviderVersion
-    }
-
-    return 
-
+    Get-PackageProvider -ListAvailable -Name Nuget -ErrorAction SilentlyContinue
 
 }
 
 # TODO Verify function
 # Installs required version of Nuget
-function Install-NugetPackageProvider {
-    param (
-        [switch]$Install
-    )
-    
-    if ($Install){
+function Install-Nuget {
         
         Install-PackageProvider -Name nuget -MinimumVersion "2.8.5.201" -Force
-    }
+
 }
+
+function Restart-ScriptSession
+{
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$($PSCommandPath)`""
+    Stop-Process -Id $PID -Force
+}
+
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
 
-# Check Execution Policy
-New-BitlockerLog -Type Info -Message "Checking execution policy."
-if (!(Get-ExecutionPolicy) -eq "Bypass") {
-    try {
-        Set-ExecutionPolicy Bypass -Force -ErrorAction Stop
-    }
-    catch [System.Management.Automation.RuntimeException] {
-
-            New-BitlockerLog -Type Error
-    }
-
+# Check if Bitlocker is already enabled
+if ((Get-BitlockerState).IsVolumeEncrypted())
+{
+    New-BitlockerLog -Type Info -Message "Bitlocker already enabled: Exiting process"
+    return
 }
 
-# Check BIOS Version
-# Upgrade BIOS if not up to date
-New-BitlockerLog -Type Info -Message "Checking BIOS version."
-$current_ver = Get-SMBiosVersion
-$required_ver = 2.4
-if (Get-SMBiosRequiresUpgrade) {
-   try {
+# Check Execution Policy
 
-    throw "Current BIOS version $current_ver. Version is out of date. Update BIOS to $required_ver or later and try again."
+New-BitlockerLog -Type Info -Message "Checking execution policy..."
+if ((Get-ExecutionPolicy -Scope Process) -notin @("Bypass", "Unrestricted") -and (Get-ExecutionPolicy) -ne "Unrestricted") {
+    New-BitlockerLog -Type Info -Message "Policy current set to [$(Get-ExecutionPolicy -Scope Process)]. Bypass or Unrestricted required: Restarting script."
+    Restart-ScriptSession
+}
+New-BitlockerLog -Type Info -Message "Valid execution policy set"
 
-   }catch {
+# Install DellBiosProvider
+# Spawns new session to ensure module is loaded because it is inconsistent otherwise
+# Else shoud run when session restarts
+New-BitlockerLog -Type Info -Message "Checking for and installing DellBiosProvider if needed..." 
+if ($null -eq (Get-Module -ListAvailable DellBIOSProvider))
+{
+    try {
+    New-BitlockerLog -Type info  -Message "Checking for Nuget and installing if needed"
+    
+    if (!(IsNugetInstalled)) {
 
-    New-BitlockerLog -Type Error -Message $_.Exception.Message
-   }
+        Install-PackageProvider -Name Nuget -Force
+    }
+
+    New-BitlockerLog -Type info  -Message "Missing Dell module`n`tInstalling module..."
+    Install-Module -Name DellBiosProvider -MinimumVersion "2.7.2" -Force 
+
+    New-BitlockerLog -Type info  -Message "Module installed`nRestarting script..."
+
+    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$($PSCommandPath)`""
+    New-BitlockerLog -Info -Message "Terminating previous session and continuing execution in new session"
+    Stop-Process -Id $PID -Force
+
+    } catch {
+        New-BitlockerLog -Type Error
+        Stop-ScriptExecution -ExitScript
+    }
+
+} else {
+
+    New-BitlockerLog -Type Info -Message "Importing module: [DellBiosProvider]"
+    Import-Module -Name DellBIOSProvider -Force
+}
+
+# Install Microsoft Runtime Libraries
+New-BitlockerLog -Type Info -Message "Checking and installing Microsoft Runtimes libraries"
+
+$Products = Get-CimInstance Win32_Product
+
+if (!($bitlocker_settings.TPMReady) -and !(Get-SMBiosRequiresUpgrade)) {
+    try {
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2010 is installed"
+
+        if($Products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is already installed"
+
+        }else{
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2010"
+
+            Install-Redistributables -Install2010
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is installed"
+        }
+    }
+    catch {
+
+        New-BitlockerLog -Type Error 
+        Stop-ScriptExecution -ExitScript
+    }
+
+    try {
+
+        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2022 is installed"
+
+        if ($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" }) {
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is already installed"
+        }else {
+            
+            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2022"
+
+            Install-Redistributables -Install2022
+
+            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is installed"
+
+        }
+        
+    }
+    catch {
+        
+        New-BitlockerLog -Type Error
+        Stop-ScriptExecution -ExitScript
+    }
+
 }
 
 $TPMState = Get-TPMState
@@ -508,20 +485,21 @@ Switch ($bitlocker_settings){
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
-            New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
-            Stop-ScriptExecution  -ExitScript
+            New-BitlockerLog -Type Info -Message "Bitlocker is enabled"
+            Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
-            New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Stop-ScriptExecution  -ExitScript
+            New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!`n$($_.Exception)"
+            Exit
         }
 
-        Stop-ScriptExecution  -ExitScript
+        Exit
     }
     {$_.TPMReady -eq $false} {
-        Write-Host "TPM not ready. Attempting to enable TPM."
-        New-BitlockerLog -Type Info -Message "TPM not ready. Attempting to enable."; break}
+
+        New-BitlockerLog -Type Info -Message "TPM not ready. Attempting to enable."; break
+    }
     
     # This statment is to mitigate an instance of the drive being fully encrypted, with no key protectors and protection status off
     # It is similar to the first statement, but is for separate bugs    
@@ -546,16 +524,16 @@ Switch ($bitlocker_settings){
                     Resume-BitLocker -MountPoint "C:"                
                 }
             }
-            New-BitlockerLog -Type Info -Message "Bitlocker is now enabled"
-            Stop-ScriptExecution  -ExitScript
+            New-BitlockerLog -Type Info -Message "Bitlocker is enabled"
+            Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
             New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Stop-ScriptExecution  -ExitScript
+            Exit
         }
       
-        Stop-ScriptExecution  -ExitScript
+        Exit
 
     }
     {($_.Encrypted -eq $false) -and ($_.TPMReady -eq $true)}{
@@ -565,235 +543,56 @@ Switch ($bitlocker_settings){
         try {
             Set-BitlockerState
             New-BitlockerLog -Type Info -Message "Bitlocker is enabled. Protection status will change to ON once fully encrypted."
-            Stop-ScriptExecution  -ExitScript
+            Exit
         }
         catch [System.Runtime.InteropServices.COMException]{
             New-BitlockerLog -Type Error -Message $_.Exception.Message
             New-BitlockerLog -Type Error -Message "FAILUE: Enabling Bitlocker was unsuccessful. Manual remediation required!"
-            Stop-ScriptExecution  -ExitScript
+            Exit
         }
 
-        Stop-ScriptExecution  -ExitScript
+        Exit
         
     }
 }
 
-
-# TODO Add installation instructions
-New-BitlockerLog -Type Info -Message "Verifying dependencies for TPM enablement"
-
-$Products = Get-CimInstance Win32_Product
-
-# Install Microsoft Runtime Libraries
-if (!($bitlocker_settings.TPMReady) -and !(Get-SMBiosRequiresUpgrade)) {
-
-    # Install Microsoft Visual runtime 2010
-    try {
-
-        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2010 is installed"
-
-        if($Products | Where-Object { $_.name -like "Microsoft Visual C++ 2010*" }) {
-
-            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is already installed"
-
-        }else{
-            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2010"
-
-            Install-Redistributables -Install2010
-
-            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2010 is installed"
-        }
-    }
-    catch {
-
-        New-BitlockerLog -Type Error 
-        Stop-ScriptExecution -ExitScript
-    }
-
-    # Install Microsoft Visual runtime 2022
-    try {
-
-        New-BitlockerLog -info -Message "Verifying Microsoft Visual runtime 2022 is installed"
-
-        if ($products | Where-Object { $_.name -like "Microsoft Visual C++ 2015-2022*" }) {
-
-            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is already installed"
-
-        }else {
-            
-            New-BitlockerLog -Type info -Message "Installing Microsoft Visual runtime 2022"
-
-            Install-Redistributables -Install2022
-
-            New-BitlockerLog -Type Info -Message "Microsoft Visual runtime 2022 is installed"
-
-        }
-        
-    }
-    catch {
-        
-        New-BitlockerLog -Type Error
-        Stop-ScriptExecution -ExitScript
-    }
-
-}
-
-
-# Install Nuget Package Provider
-$NugetVersion = Get-NugetPackageProviderVersion -Version
-
-New-BitlockerLog -Type Info -Message "Verifying Nuget package provider installation"
-
-switch (Get-NugetPackageProviderVersion -InstallCheck) {
-
-    ($_ -eq $true) {
-
-        New-BitlockerLog -Type Info -Message "Nuget is installed with a compatible version"; break
-    }
-    ($_ -eq $false) {
-
-        New-BitlockerLog -Type Info -Message "Nuget version: $($NugetVersion) is not compatible and will be upgraded"
-
-        try {
-            
-            New-BitlockerLog -Type Info -Message "Installing Nuget package provider"
-
-            Install-NugetPackageProvider -Install
-
-            New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
-
-        }
-        catch {
-
-            New-BitlockerLog -Type Error
-            Stop-ScriptExecution -ExitScript
-
-        };break
-
-    }
-    ($_ -eq "Nuget not installed") {
-
-        try {
-        
-        New-BitlockerLog -Type Info -Message "Nuget was not found. Installing Nuget package provider"
-
-        Install-NugetPackageProvider -Install
-
-        New-BitlockerLog -Type Info -Message "Nuget package provider has been installed"
-            
-        }
-        catch {
-
-            New-BitlockerLog -type Error
-            Stop-ScriptExecution -ExitScript
-
-        }; break
-        
-
-    }
-}
-
-# Install DellBiosProvider
-$IsDellBiosProviderInstalled = Get-DellBiosProviderVersion -InstallCheck
-$DellBiosProviderVersion = Get-DellBiosProviderVersion -InstalledVersion
-$RequiredVersion = "2.7.2"
-
-New-BitlockerLog -Type Info -Message "Verifying DellBiosProvider installation"
-
-if ($IsDellBiosProviderInstalled -eq $true){
-
-    New-BitlockerLog -Type Info -Message "A compatible version of DellBiosProvider is already installed. Continuing"
-
-}elseif (!($IsDellBiosProviderInstalled)) {
-
-        New-BitlockerLog -Type Info -Message "Current DellBiosProvider version: $($DellBiosProviderVersion) is not compatible. Attempting to update to $($RequiredVersion)"
-
-        try {
-
-            Install-DellBiosProvider -Upgrade
-
-            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
-            
-        }
-        catch {
-            
-            New-BitlockerLog -Type Error
-            Stop-ScriptExecution -ExitScript
-        }
-
-}elseif (($IsDellBiosProviderInstalled) -eq "DellBiosProvider NOT installed") {
-
-        New-BitlockerLog -Type Info -Message "DellBiosProvider not found. Attempting install"
-
-        try {
-            
-            Install-DellBiosProvider -Install
-
-            New-BitlockerLog -Type Info -Message "DellBiosProvider version: $($DellBiosProviderVersion) has been installed"
-
-        }catch {
-            
-            New-BitlockerLog -Type Error
-            Stop-ScriptExecution -ExitScript
-        }
-}
-
-<# # Install DellBiosProvider
-if (!(Get-SMBiosRequiresUpgrade) -and !($TPMState.CheckTPMReady())) {
-
-    New-BitlockerLog -Type Info -Message "Installing DellBiosProvider."
-
-    try {
-        Install-Module -Name DellBiosProvider -MinimumVersion 2.7.2 -Force
-        Import-Module DellBiosProvider -Verbose
-        
-    }
-    catch {
-        New-BitlockerLog -Type Error -Message $_.Exception.Message
-
-        New-BitlockerLog -Type Info -Message "There was an issue installing or importing DellBiosProvider. Manual remediation required!"
-        Exit 
-        
-    }
-
-    New-BitlockerLog -Type Info -Message "DellBiosProvider installed successfully." 
-
-} #>
 
 # TODO Review setting BIOS password and error handling
 # Set BIOS Password
 if (!(IsBIOSPasswordSet)) {
 
-        New-BitlockerLog -Type Info -Message "Attempting to set password."
-        New-BitlockerLog -Type Info -Message "Generating Password."
+        New-BitlockerLog -Type Info -Message "Generating password for BIOS"
         Set-BiosAdminPassword -GeneratePassword
+        New-BitlockerLog -type info -message "Password generated successfully"
 
     try {
-        New-BitlockerLog -Type Info -Message "Setting BIOS Password."
-
-        Set-BiosAdminPassword -AddPassword
-
-        New-BitlockerLog -Type Info -Message "Password had been set to $(Get-PWFileInfo -RetrieveLastPassword)."
+        New-BitlockerLog -Type Info -Message "Setting BIOS password"
+        # TODO BiosPassword set 
+        Set-BiosAdminPassword -SetPassword
+        New-BitlockerLog -Type Info -Message "BIOS password has been set to '$(Get-PWFileInfo -RetrieveLastPassword)'"
 
     }
     catch [System.Management.Automation.PSSecurityException]  {
         # If this is caught then a password was previously set
-        New-BitlockerLog -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error
         
-        New-BitlockerLog -Type Info -Message "Failed to set password. A previous password has been set."
+        New-BitlockerLog -Type Info -Message "Failed to set password. A previous password is already set."
+
         Stop-ScriptExecution -ExitScript
     }
     catch [System.Management.Automation.DriveNotFoundException] {
-        # TODO add error handling for Dellsmbios not found
-    
-    
+        # If this is caught the DellSMBios PS Drive is not loaded
+        New-BitlockerLog -Type Error
+        Stop-ScriptExecution -ExitScript
+
+    } 
+} 
+else {    
+    New-BitlockerLog -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"    
+    Stop-ScriptExecution -ExitScript
 }
-}elseif (IsBIOSPasswordSet) {
-    
-    New-BitlockerLog -Type Error -Message "Unknown BIOS password is set. Manual remediation required!"
-    
-    Exit
-}
+
+
 
 # Enable TPM scurity in the BIOS
 $credential = Get-PWFileInfo -RetrieveLastPassword
@@ -801,7 +600,7 @@ if (IsTPMSecurityEnabled) {
 
     New-BitlockerLog -Type Info -Message "TPM security is already enabled in the BIOS."
 
-}else {
+} else {
 
     try {
         New-BitlockerLog -Type Info -Message "Attempting to enable TPM Security in the BIOS."
@@ -819,35 +618,11 @@ if (IsTPMSecurityEnabled) {
    
 }
 
-# Enable TPM Activation in the BIOS
-if (IsTPMActivated) {
-
-    New-BitlockerLog -Type Info -Message "TPM is already activated in the BIOS."
-
-}else {
-    try {
-
-        New-BitlockerLog -Type Info -Message "Attempting to activate the TPM."
-
-        Set-Item -Path DellSmbios:\TPMSecurity\TPMActivation Enabled -Password $credential -ErrorAction Stop    
-    }
-    catch [System.Management.Automation.ItemNotFoundException] {
-        # Catches "Item Not Found" Error and writes a log
-        New-BitlockerLog -Type Error -Message $_.Exception.Message
-
-        New-BitlockerLog -Type Info -Message "The option to activate the TPM was not found."
-    }
-
-    New-BitlockerLog -Type Info -Message "TPM has been enabled."
-}
-
 # Check if TPM is enabled and activated in the BIOS then remove password
-if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
+if (((IsTPMSecurityEnabled) -eq $true)) {
     
     try {
         New-BitlockerLog -Type Info -Message "Attempting removal of BIOS password."
-
-        Get-PWFileInfo -IsFilePresent
 
         New-BitlockerLog -Type Info -Message "Password file found: $(Get-PWFileInfo -IsFilePresent)."
 
@@ -855,13 +630,14 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
     }
     catch [System.Management.Automation.ItemNotFoundException] {
         # Catches an error for the biospw.txt file missing
-        New-BitlockerLog -Type Error -Message $_.Exception.Message
+        New-BitlockerLog -Type Error 
 
     }
     catch [System.InvalidOperationException] {
 
         # Catches Incorrect Password error and checks if more than one password exists in the biospw.txt file
-        New-BitlockerLog -Type Error -Message $_.ErrorDetails.Message
+        New-BitlockerLog -Type Error 
+
         $fileCheck = Get-PWFileInfo -PasswordCount
 
         switch ($fileCheck) {
@@ -869,12 +645,12 @@ if (((IsTPMSecurityEnabled) -eq $true) -and ((IsTPMActivated) -eq $true)) {
             {$_ -gt 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entries. Manual remediation required!"; break}
             {$_ -eq 1} {New-BitlockerLog -Type Info -Message "File contains $($_) password entry, but it appears to be incorrect. Manual remediation required!"; break}
         }
-        Stop-ScriptExecution  -ExitScript
+        Stop-ScriptExecution -ExitScript
         
     }
     catch [System.ArgumentOutOfRangeException] {
         # Catches password out range or not set error
-        New-BitlockerLog -Type Error -Message "$($_.Exception.Message) This can mean the password is not set at all."
+        New-BitlockerLog -Type Error 
         
     }
 
@@ -888,7 +664,7 @@ if (IsBIOSPasswordSet) {
    }
    catch {
         New-BitlockerLog -Type Error -Message $_.Exception.Message
-        Stop-ScriptExecution  -ExitScript
+        Stop-ScriptExecution -ExitScript
    }
 }else {
     New-BitlockerLog -Type Info -Message "Removing password file."
