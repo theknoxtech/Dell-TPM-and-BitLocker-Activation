@@ -8,7 +8,7 @@ This script is used to enable Bitlocker.
 This script is used to enable Bitlocker with TPM and Recovery Password protectors. It will also attempt to activate the TPM on Dell computers using the DellBiosProvider module.
 
 Author: Jon Witherspoon
-Last Modified: 12-30-24
+Last Modified: 8/11/25
 
 .PARAMETER Name
 
@@ -20,8 +20,7 @@ None. You cannot pipe objects to this script.
 
 .OUTPUTS
 
-Console output of status or errors.
-Log transcript.
+Logss to console and logfile
 
 .EXAMPLE
 
@@ -140,24 +139,6 @@ function Get-ScriptCheckpointExists
         throw "`"Get-ScriptCheckpointExists -CheckpointName`" must not be null!"
     }
 }   
-
-# Convert exception to string and match for HRESULT code and return it
-<# function Get-ExceptionCode {
-    param (
-        [String]$errorcode
-    )
-    $regex = "\((0x[0-9A-Fa-f]+)\)"
-
-    if ($errorcode.ToString() -match $regex) {
-
-        $code = $Matches[1]
-        return $code
-    }
-}
- #>
-<# function Get-ComputerModel {
-    
-} #>
 
 # Check BIOS verion
 function Get-SMBiosVersion 
@@ -341,7 +322,6 @@ function IsBIOSPasswordSet
 }
 
 # Gets BiosPW.txt file presence and count of passwords in file
-#TODO Break into separate functions
 function Get-PWFileInfo
 {
     
@@ -412,19 +392,12 @@ function IsTPMSecurityEnabled
 
 }
 
-# TODO Verify function
 # Returns [bool] true or false if NuGet is installed and if a compatible version. Returns [string] if NuGet not installed
 function IsNugetInstalled
 {
     Get-PackageProvider -ListAvailable -Name Nuget -ErrorAction SilentlyContinue
 }
 
-# TODO Verify function
-# Installs required version of Nuget
-function Install-Nuget
-{
-    Install-PackageProvider -Name nuget -MinimumVersion "2.8.5.201" -Force
-}
 ########################
 ### SCRIPT FUNCTIONS ###
 ########################
@@ -595,10 +568,7 @@ Switch ($bitlocker_settings){
 
 
 
-# Install DellBiosProvider
-# Spawns new session to ensure module is loaded because it is inconsistent otherwise
-# Else shoud run when session restarts
-
+# Install DellBiosProvider & Restart scipt if checkpoint not found. Imports module & and enables TPM if checkpoint is found
 switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
     $false {
 
@@ -623,7 +593,7 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
 
             New-ScriptCheckpoint -CheckpointName "CheckPoint_1"
 
-            Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$($PSCommandPath)`""
+            Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$($PSCommandPath)`"" -NoNewWindow
 
             New-BitlockerLog -Info -Message "Terminating previous session and continuing execution in new session"
 
@@ -650,7 +620,7 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
         New-BitlockerLog -Type Info -Message "Importing DellBiosProvider"
         Import-Module -Name DellBIOSProvider -Force
 
-            # Install Microsoft Runtime Libraries
+        # Install Microsoft Runtime Libraries
         New-BitlockerLog -Type Info -Message "Checking and installing Microsoft Runtimes libraries"
 
         $Products = Get-CimInstance Win32_Product
@@ -710,7 +680,6 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
                     Stop-ScriptExecution -ExitScript
                 }
 }
-# TODO Review setting BIOS password and error handling
             # Set BIOS Password
             if (!(IsBIOSPasswordSet))
             {
@@ -726,7 +695,7 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
                 try 
                 {
                     New-BitlockerLog -Type Info -Message "Setting BIOS Password."
-                    # TODO BiosPassword set 
+
                     Set-BiosAdminPassword
                 
                 }
@@ -753,9 +722,6 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
                         {
                         
                             New-BitlockerLog -Type Info -Message "Attempting to retry setting BIOS password"
-
-                            # TODO Biospassword set
-                        
                             Set-BiosAdminPassword
                         }
                     
@@ -773,7 +739,7 @@ switch (Get-ScriptCheckpointExists -CheckpointName "CheckPoint_1") {
                 Stop-ScriptExecution -ExitScript
 }
 
-# Enable TPM scurity in the BIOS
+            # Enable TPM scurity in the BIOS
             $credential = Get-PWFileInfo -RetrieveLastPassword
             if (IsTPMSecurityEnabled)
             {
