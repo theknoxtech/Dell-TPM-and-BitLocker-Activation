@@ -24,7 +24,7 @@ Logss to console and logfile
 
 .EXAMPLE
 
-PS> .\Enable-Bitlocker.ps1
+PS> .\Activate-BitLocker.ps1
 
 .LINK
 
@@ -34,7 +34,7 @@ None.
 
 
 # Global Variables
-$global:LTSvc = "C:\Windows\LTSvc\packages\Enable-Blocker"
+$global:LTSvc = "C:\Windows\LTSvc\packages\Activate-Blocker"
 $global:EncryptVol = Get-CimInstance -Namespace 'ROOT/CIMV2/Security/MicrosoftVolumeEncryption' -Class Win32_EncryptableVolume -Filter "DriveLetter='C:'"
 $global:TimeStamp = (Get-Date).ToString("MM/dd/yyyy HH:mm:ss")
 
@@ -53,7 +53,7 @@ function New-BitlockerLog
         Error
     }
 
-    $LogPath = "$LTSvc\enable_bitlocker.txt"
+    $LogPath = "$LTSvc\activate_bitlocker.txt"
     
 
     $console_logs = @{
@@ -74,7 +74,7 @@ function Stop-ScriptExecution {
     param (
         [switch]$ExitScript
     )
-    $LogPath = "$LTSvc\enable_bitlocker.txt"
+    $LogPath = "$LTSvc\activate_bitlocker.txt"
     $Failure =  "$($timestamp) : FAILURE: Script Halted at Line: $($MyInvocation.ScriptLineNumber) "
 
     if ($ExitScript){ 
