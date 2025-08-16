@@ -1,5 +1,6 @@
 # Name of the workflow.
-name: Sync File to Gist
+name: Deploy to Gist
+
 
 # This workflow runs on any push event to the "main" branch.
 on:
@@ -21,7 +22,7 @@ jobs:
 
       # Step 2: Run the action to sync the file to the Gist.
       - name: Sync file to Gist
-        uses: exuanbo/actions-sync-gist@v2
+        uses: exuanbo/actions-deploy-gist@v1.1.4
         with:
           # A personal access token with the 'gist' scope.
           # You must create this and add it as a secret named GIST_TOKEN.
