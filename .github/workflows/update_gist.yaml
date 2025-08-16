@@ -1,0 +1,34 @@
+# Name of the workflow.
+name: Sync File to Gist
+
+# This workflow runs on any push event to the "main" branch.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # The single job in this workflow.
+  sync-gist:
+    # The type of runner that the job will run on.
+    runs-on: ubuntu-latest
+
+    # The sequence of tasks to be executed.
+    steps:
+      # Step 1: Check out the repository's code so the action can access it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Run the action to sync the file to the Gist.
+      - name: Sync file to Gist
+        uses: exuanbo/actions-sync-gist@v2
+        with:
+          # A personal access token with the 'gist' scope.
+          # You must create this and add it as a secret named GIST_TOKEN.
+          token: ${{ secrets.GIST_TOKEN }}
+
+          # The unique ID of the Gist you want to update.
+          gist_id: ${{ secrets.GIST_ID }}
+
+          # The path to the script file within this repository.
+          file_path: '/Activate-Bitlocker.ps1'
