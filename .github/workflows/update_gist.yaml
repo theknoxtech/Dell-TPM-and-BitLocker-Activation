@@ -32,4 +32,4 @@ jobs:
           gist_id: ${{ secrets.GIST_ID }}
 
           # The path to the script file within this repository.
-          file_path: '/Activate-Bitlocker.ps1'
+          file_path: '\Dell-TPM-and-BitLocker-Activation\Activate-BitLocker.ps1'
