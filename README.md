@@ -132,6 +132,18 @@ The main part of the script is a large `Switch` statement that evaluates the cur
 |Script fails with `DriveNotFoundException` for `DellSmbios:`|The `DellBiosProvider` module did not load correctly.|Ensure the module is installed correctly and try importing it manually with `Import-Module -Name DellBIOSProvider -Force`.|
 |A reboot is required.|The script enabled the TPM in the BIOS, which requires a full system restart to take effect.|Reboot the computer and then run the script again. The script will pick up where it left off and proceed with encryption.|
 
+## 🪛 RMM Support
+
+- Script can be used with an RMM.
+- Script can fully automate the process of ensuring the TPM and BitLocker are enabled on Dell computers.
+- To fully automate this process you will need to have your tooling setup with a secondary script to pull the BitLocker key for storage in Entra, Active Directory, or other place of your choosing.
+
+
+## 🤝 Contributing
+
+  Contributions, issues, and feature requests are welcome! Feel free to check the [issues page]([https://github.com/theknoxtech/Dell-TPM-and-BitLocker-Activation/issues]) for this project to see how you can help.
+  
+
 ## 📄 License
 
 This project is unlicensed and free to use.
